@@ -13,9 +13,15 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="MNIST Data">
+      <UniqueIdentifier>{ff96988b-7940-44fb-804f-2d3a82915924}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MNISTLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -23,5 +29,22 @@
     <ClInclude Include="Tensor.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="MNISTLoader.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="MNIST Data\t10k-images.idx3-ubyte">
+      <Filter>MNIST Data</Filter>
+    </None>
+    <None Include="MNIST Data\t10k-labels.idx1-ubyte">
+      <Filter>MNIST Data</Filter>
+    </None>
+    <None Include="MNIST Data\train-images.idx3-ubyte">
+      <Filter>MNIST Data</Filter>
+    </None>
+    <None Include="MNIST Data\train-labels.idx1-ubyte">
+      <Filter>MNIST Data</Filter>
+    </None>
   </ItemGroup>
 </Project>

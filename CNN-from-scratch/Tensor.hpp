@@ -2,9 +2,14 @@
 #include <vector>
 #include <cassert>
 #include <iostream>
+#include <string>
 
-using std::vector, std::cout, std::endl;
+using std::vector, std::cout, std::endl, std::string;
 
+/// <summary>
+/// A multidimensional array.
+/// </summary>
+/// <typeparam name="T"></typeparam>
 template<typename T>
 class Tensor {
 public:
@@ -13,19 +18,45 @@ public:
 	/// (Ex. 0 for int).
 	/// </summary>
 	/// <param name="dims"></param>
-	Tensor(vector<size_t> dims) {
+	Tensor(vector<int> dims) {
 		assert(dims.size() > 0);
 		this->dims = dims;
-		coordinateConversionLookupTable = vector<size_t>(dims.size());
+		coordinateConversionLookupTable = vector<int>(dims.size());
 
 		// Total number of elements in data
-		size_t size = 1;
-		for (int i = dims.size() - 1; i >= 0; i--) {
-			coordinateConversionLookupTable[i] = size;
-			size *= dims[i];
+		int size = 1;
+		for (int i = 0; i < dims.size(); i++) {
+			// Initialize back to front since we can use size for the lookup table if we do it like this
+			int currentIndex = dims.size() - 1 - i;
+			coordinateConversionLookupTable[currentIndex] = size;
+			size *= dims[currentIndex];
 		}
 
 		data = vector<T>(size);
+	}
+
+	/// <summary>
+	/// Initializes data with the given vector.
+	/// (Ex. 0 for int).
+	/// </summary>
+	/// <param name="dims"></param>
+	Tensor(vector<T> data, vector<int> dims) {
+		assert(dims.size() > 0);
+		this->dims = dims;
+		coordinateConversionLookupTable = vector<int>(dims.size());
+
+		// Total number of elements in data
+		int size = 1;
+		for (int i = 0; i < static_cast<int>(dims.size()); i++) {
+			// Initialize back to front since we can use size for the lookup table if we do it like this
+			int currentIndex = static_cast<int>(dims.size()) - 1 - i;
+			coordinateConversionLookupTable[currentIndex] = size;
+			size *= dims[currentIndex];
+		}
+
+		// Verify that the data passed in matches the expected size
+		assert(data.size() == size);
+		this->data = data;
 	}
 
 	/// <summary>
@@ -34,8 +65,8 @@ public:
 	/// </summary>
 	/// <param name="indices"></param>
 	/// <returns>The element at the specified indices.</returns>
-	T get(const vector<size_t> &indices) {
-		size_t flattenedIndex = getFlattenedIndex(indices);
+	T get(const vector<int> &indices) {
+		int flattenedIndex = getFlattenedIndex(indices);
 		return data[flattenedIndex];
 	}
 
@@ -44,34 +75,55 @@ public:
 	/// </summary>
 	/// <param name="indices"></param>
 	/// <param name="value"></param>
-	void set(const vector<size_t> &indices, T value) {
-		size_t flattenedIndex = getFlattenedIndex(indices);
+	void set(const vector<int> &indices, T value) {
+		int flattenedIndex = getFlattenedIndex(indices);
 		data[flattenedIndex] = value;
 	}
 
 	/// <summary>
-	/// Prints a 2d tensor to console
+	/// Prints a 2d tensor to console. Dimensions are represented as { row,col }.
 	/// </summary>
-	void print2d() {
+	void print2d(string delimiter = " ") {
 		assert(dims.size() == 2);
-		for (size_t row = 0; row < dims[0]; row++) {
-			for (size_t col = 0; col < dims[1]; col++) {
-				cout << get({ row,col }) << " ";
+		for (int row = 0; row < dims[0]; row++) {
+			for (int col = 0; col < dims[1]; col++) {
+				cout << get({ row,col }) << delimiter;
 			}
 			cout << endl;
 		}
 	}
 
 	/// <summary>
-	/// Prints a 3d tensor to console
+	/// Prints a 2d tensor to console. Meant for visualizing images from the MNIST dataset.
 	/// </summary>
-	void print3d() {
+	/// <param name="threshold"></param>
+	void print2dThreshold(T threshold) {
+		assert(dims.size() == 2);
+		for (int row = 0; row < dims[0]; row++) {
+			for (int col = 0; col < dims[1]; col++) {
+				T value = get({ row,col });
+				if (value >= threshold) {
+					cout << "#";
+				}
+
+				else {
+					cout << " ";
+				}
+			}
+			cout << endl;
+		}
+	}
+
+	/// <summary>
+	/// Prints a 3d tensor to console. Dimensions are represented as { row,col,depth }.
+	/// </summary>
+	void print3d(string delimiter = " ") {
 		assert(dims.size() == 3);
-		for (size_t depth = 0; depth < dims[2]; depth++) {
+		for (int depth = 0; depth < dims[2]; depth++) {
 			cout << "Depth: " << depth << endl;
-			for (size_t row = 0; row < dims[0]; row++) {
-				for (size_t col = 0; col < dims[1]; col++) {
-					cout << get({ row,col,depth}) << " ";
+			for (int row = 0; row < dims[0]; row++) {
+				for (int col = 0; col < dims[1]; col++) {
+					cout << get({ row,col,depth}) << delimiter;
 				}
 				cout << endl;
 			}
@@ -87,20 +139,20 @@ private:
 	/// The dimensions of the tensor. 
 	/// (Ex. { 2,3 } for a matrix with 2 rows and 3 columns)
 	/// </summary>
-	vector<size_t> dims;
+	vector<int> dims;
 	/// <summary>
 	/// Lookup table used for converting multidimensional coordinates to a flattened representation.
 	/// </summary>
-	vector<size_t> coordinateConversionLookupTable;
+	vector<int> coordinateConversionLookupTable;
 
 	/// <summary>
 	/// Converts a multidimensional set of indices to the equivalent flattened index
 	/// </summary>
 	/// <param name="indices"></param>
 	/// <returns>The flattened index</returns>
-	size_t getFlattenedIndex(const vector<size_t> &indices) {
-		size_t flattenedIndex = 0;
-		for (size_t i = 0; i < indices.size(); i++) {
+	int getFlattenedIndex(const vector<int> &indices) {
+		int flattenedIndex = 0;
+		for (int i = 0; i < indices.size(); i++) {
 			// Make sure the index isn't out of bounds
 			assert(indices[i] < dims[i]);
 			flattenedIndex += coordinateConversionLookupTable[i] * indices[i];

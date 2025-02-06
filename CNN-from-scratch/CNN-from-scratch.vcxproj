@@ -129,9 +129,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MNISTLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="MNISTLoader.hpp" />
     <ClInclude Include="Tensor.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="MNIST Data\t10k-images.idx3-ubyte" />
+    <None Include="MNIST Data\t10k-labels.idx1-ubyte" />
+    <None Include="MNIST Data\train-images.idx3-ubyte" />
+    <None Include="MNIST Data\train-labels.idx1-ubyte" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
