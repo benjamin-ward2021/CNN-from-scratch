@@ -119,6 +119,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,10 +129,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FullyConnected.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MNISTLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="FullyConnected.hpp" />
+    <ClInclude Include="Layer.hpp" />
     <ClInclude Include="MNISTLoader.hpp" />
     <ClInclude Include="Tensor.hpp" />
   </ItemGroup>

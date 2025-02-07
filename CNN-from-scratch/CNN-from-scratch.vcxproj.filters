@@ -24,12 +24,21 @@
     <ClCompile Include="MNISTLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="FullyConnected.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Tensor.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MNISTLoader.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Layer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FullyConnected.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

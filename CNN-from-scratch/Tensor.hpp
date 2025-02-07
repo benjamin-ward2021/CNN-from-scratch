@@ -1,4 +1,5 @@
 #pragma once
+
 #include <vector>
 #include <cassert>
 #include <iostream>
@@ -13,8 +14,12 @@ using std::vector, std::cout, std::endl, std::string;
 template<typename T>
 class Tensor {
 public:
+	// All types of tensors are friends with all other types of tensors, and can access their private variables.
+	// (Ex. Tensor<float> can access dims of a Tensor<int>).
+	friend class Tensor;
+
 	/// <summary>
-	/// Initializes data with size of sum(dims), where each element is the types default value.
+	/// Initializes data with each element being the default value.
 	/// (Ex. 0 for int).
 	/// </summary>
 	/// <param name="dims"></param>
@@ -27,7 +32,7 @@ public:
 		int size = 1;
 		for (int i = 0; i < dims.size(); i++) {
 			// Initialize back to front since we can use size for the lookup table if we do it like this
-			int currentIndex = dims.size() - 1 - i;
+			int currentIndex = static_cast<int>(dims.size()) - 1 - i;
 			coordinateConversionLookupTable[currentIndex] = size;
 			size *= dims[currentIndex];
 		}
@@ -78,6 +83,33 @@ public:
 	void set(const vector<int> &indices, T value) {
 		int flattenedIndex = getFlattenedIndex(indices);
 		data[flattenedIndex] = value;
+	}
+
+	/// <summary>
+	/// Multiplies two matrices, specifically this * other. They don't have to be the same type, and neither does the return type.
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <typeparam name="V"></typeparam>
+	/// <param name="other"></param>
+	/// <returns></returns>
+	template <typename U, typename V>
+	Tensor<U> matrixMultiply(Tensor<V> other) {
+		assert(dims.size() == 2 && other.dims.size() == 2);
+		assert(dims[1] == other.dims[0]);
+
+		Tensor<U> product({ dims[0],other.dims[1] });
+		for (int i = 0; i < dims[0]; i++) {
+			for (int j = 0; j < other.dims[1]; j++) {
+				U value = static_cast<U>(0);
+				for (int k = 0; k < other.dims[0]; k++) {
+					value += static_cast<U>(get({ i,k }) * other.get({ k,j }));
+				}
+
+				product.set({ i,j }, value);
+			}
+		}
+
+		return product;
 	}
 
 	/// <summary>

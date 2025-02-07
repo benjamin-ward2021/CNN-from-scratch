@@ -14,6 +14,19 @@ MNISTLoader::MNISTLoader(string imagesPath, string labelsPath, int maxAmount) {
 }
 
 /// <summary>
+/// Prints the specified images with their labels. Start is inclusive and end is exclusive.
+/// </summary>
+/// <param name="start"></param>
+/// <param name="end"></param>
+void MNISTLoader::printData(int start, int end) {
+	assert(end <= images.size());
+	for (int i = start; i < end; i++) {
+		images[i].print2dThreshold(0.5);
+		cout << "Label: " << labels[i] << endl;
+	}
+}
+
+/// <summary>
 /// Can be used to load either train or test images. 
 /// Currently, if maxAmount is less than the total amount, this will take the first maxAmount images.
 /// </summary>

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@ public:
 	vector<Tensor<double>> images;
 	// Labels correspond with the handwritten digit. (Ex. image of handwritten 7 has label 7).
 	vector<int> labels;
+	void printData(int start, int end);
 private:
 	void loadImages(string path, int maxAmount);
 	void loadLabels(string path, int maxAmount);
