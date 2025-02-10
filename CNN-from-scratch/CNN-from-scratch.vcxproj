@@ -129,7 +129,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FullyConnected.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MNISTLoader.cpp" />
   </ItemGroup>

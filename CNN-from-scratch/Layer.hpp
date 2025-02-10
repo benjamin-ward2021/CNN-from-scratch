@@ -9,7 +9,9 @@
 /// </summary>
 class Layer {
 public:
-	virtual Tensor<double> &forward(const Tensor<double> &input) = 0;
+	// he recommended for ReLU. xavier recommended for sigmoid, tanh, softmax.
+	enum WeightInitializationHeuristic { heNormal, xavierUniform };
+	virtual Tensor<double> forward(const Tensor<double> &input) = 0;
 	virtual Tensor<double> backward() = 0;
 	virtual void save() = 0;
 	virtual void load() = 0;
