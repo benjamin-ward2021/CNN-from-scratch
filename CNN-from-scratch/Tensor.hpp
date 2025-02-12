@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 
-using std::vector, std::cout, std::endl, std::string;
+using std::vector, std::cout, std::endl, std::string, std::min;
 
 /// <summary>
 /// A multidimensional array.
@@ -30,8 +30,7 @@ public:
 	}
 
 	/// <summary>
-	/// Initializes data with the given vector.
-	/// (Ex. 0 for int).
+	/// Initializes data using the given vector.
 	/// </summary>
 	/// <param name="dims"></param>
 	Tensor(const vector<T> &data, const vector<int> &dims) : data(data), dims(dims) {
@@ -41,6 +40,9 @@ public:
 		// Verify that the data passed in matches the expected size
 		assert(data.size() == size);
 	}
+
+	// TODO: Should there also be a constructor for moving data instead of copying it?
+	// See https://en.cppreference.com/w/cpp/utility/move
 
 	/// <summary>
 	/// Gets an element from data. Excluded indices are assumed to be zero.
@@ -64,18 +66,26 @@ public:
 	}
 
 	/// <summary>
+	/// Gets the dimensions
+	/// </summary>
+	/// <returns></returns>
+	vector<int> getDims() const {
+		return dims;
+	}
+
+	/// <summary>
 	/// Reshapes the tensor.
 	/// </summary>
 	/// <param name="dims"></param>
 	void reinterpretDims(const vector<int> &dims) {
-		// This looks ugly but we don't want to make the function call in release mode, so we put it in the assert.
-		assert(data.size() == createCoordinateConversionLookupTable(dims));
+		int size = createCoordinateConversionLookupTable(dims);
+		assert(size == data.size());
 		this->dims = dims;
 	}
 
 	/// <summary>
 	/// Flattens one dimension of the tensor.
-	/// (Ex. { 2,3,4 } becomes { 6,4 }).
+	/// (Ex. { 2,3,4,5 } becomes { 2*3,4,5 } = { 6,4,5 }).
 	/// </summary>
 	void flattenOnce() {
 		assert(dims.size() > 1);
@@ -86,102 +96,274 @@ public:
 	}
 
 	/// <summary>
-	/// Multiplies two matrices, specifically this * other. They don't have to be the same type, and neither does the return type.
+	/// Flattens the tensor to 1d.
+	/// (Ex. { 2,3,4,5 } becomes { 2*3*4*5 } = { 120 }).
+	/// </summary>
+	void flattenFully() {
+		reinterpretDims({ static_cast<int>(data.size()) });
+	}
+
+	/// <summary>
+	/// Flattens the tensor, ignoring the first dimension.
+	/// This is useful since the first dimension is often the batch size.
+	/// (Ex. { 2,3,4,5 } becomes { 2,3*4*5 } = { 2,60 }).
+	/// </summary>
+	void reverseFlattenTo2d() {
+		assert(dims.size() > 1);
+		reinterpretDims({ dims[0],static_cast<int>(data.size()) / dims[0] });
+	}
+
+	/// <summary>
+	/// Multiplies two matrices together. The algorithm uses tiling, which offers significant performance gains 
+	/// due to more efficient cache use. See https://marek.ai/matrix-multiplication-on-cpu.html for more information.
 	/// </summary>
 	/// <typeparam name="U"></typeparam>
 	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
+	/// <param name="blockSize"></param>
 	/// <returns></returns>
 	template <typename U, typename V>
-	Tensor<U> matrixMultiply(const Tensor<V> &other) const {
+	Tensor<U> matrixMultiply(const Tensor<V> &other, const int blockSize = 112) const {
 		assert(dims.size() == 2 && other.dims.size() == 2);
 		assert(dims[1] == other.dims[0]);
+		int M = dims[0];
+		int N = other.dims[1];
+		int K = dims[1];
 
-		Tensor<U> product({ dims[0],other.dims[1] });
-		for (int i = 0; i < dims[0]; i++) {
-			for (int j = 0; j < other.dims[1]; j++) {
-				U value = static_cast<U>(0);
-				for (int k = 0; k < other.dims[0]; k++) {
-					value += static_cast<U>(get({ i,k }) * other.get({ k,j }));
+		Tensor<U> product({ M, N });
+
+		for (int i = 0; i < M; i += blockSize) {
+			int i_max = min(i + blockSize, M);
+			for (int j = 0; j < N; j += blockSize) {
+				int j_max = min(j + blockSize, N);
+				for (int k = 0; k < K; k += blockSize) {
+					int k_max = min(k + blockSize, K);
+					for (int ii = i; ii < i_max; ++ii) {
+						for (int kk = k; kk < k_max; ++kk) {
+							T a_val = data[ii * K + kk];
+							for (int jj = j; jj < j_max; ++jj) {
+								product.data[ii * N + jj] += a_val * other.data[kk * N + jj];
+							}
+						}
+					}
 				}
-
-				product.set({ i,j }, value);
 			}
 		}
 
+		// Uses NRVO
 		return product;
 	}
 
 	/// <summary>
-	/// Adds two tensors of the same shape together.
+	/// Adds two tensors of the same shape together. Must specify return type as first template type.
+	/// </summary>
+	/// <typeparam name="U">Return type</typeparam>
+	/// <typeparam name="V"></typeparam>
+	/// <param name="other"></param>
+	/// <returns>The tensor of sums.</returns>
+	template <typename U, typename V>
+	Tensor<U> elementwiseAdd(const Tensor<V> &other) const {
+		assert(dims == other.dims);
+		vector<U> sum(data.size());
+		for (int i = 0; i < data.size(); i++) {
+			// Only cast AFTER the operation has completed
+			sum[i] = static_cast<U>(data[i] + other.data[i]);
+		}
+	
+		return Tensor<U>(sum, dims);
+	}
+
+	/// <summary>
+	/// Adds two tensors together, where if other has fewer dimensions than this, it gets broadcasted up.
+	/// Must specify return type as first template type.
+	/// Note that this doesn't actually check that the dimensions are compatible; it only asserts that the data sizes are compatible.
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <typeparam name="V"></typeparam>
+	/// <param name="other"></param>
+	/// <returns>The tensor of sums.</returns>
+	template <typename U, typename V>
+	Tensor<U> broadcastAdd(const Tensor<V> &other) const {
+		assert(dims >= other.dims && data.size() >= other.data.size() && data.size() % other.data.size() == 0);
+		vector<U> sum(data.size());
+		int broadcastFactor = data.size() / other.data.size();
+		for (int i = 0; i < broadcastFactor; i++) {
+			for (int j = 0; j < other.data.size(); j++) {
+				int dataIndex = i * other.data.size() + j;
+				sum[dataIndex] = static_cast<U>(data[dataIndex] + other.data[j]);
+			}
+		}
+
+		return Tensor<U>(sum, dims);
+	}
+
+	/// <summary>
+	/// Adds two tensors of the same shape, in place.
+	/// (I.e. data += other.data).
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <param name="other"></param>
+	template <typename U>
+	void elementwiseAddInPlace(const Tensor<U> &other)  {
+		assert(dims == other.dims);
+		for (int i = 0; i < data.size(); i++) {
+			data[i] += other.data[i];
+		}
+	}
+
+	/// <summary>
+	/// Adds two tensors together in place, where if other has fewer dimensions than this, it gets broadcasted up.
+	/// See https://www.geeksforgeeks.org/tensor-broadcasting/
+	/// Note that this doesn't actually check that the dimensions are compatible; it only asserts that the data sizes are compatible.
 	/// </summary>
 	/// <typeparam name="U"></typeparam>
 	/// <param name="other"></param>
 	/// <returns>The tensor of sums.</returns>
 	template <typename U>
-	Tensor<T> elementwiseAdd(const Tensor<U> &other) const {
-		assert(dims == other.dims);
-		vector<T> sum;
-		sum.reserve(data.size());
-		for (int i = 0; i < data.size(); i++) {
-			sum = data[i] + other.data[i];
+	void broadcastAddInPlace(const Tensor<U> &other) {
+		assert(dims.size() >= other.dims.size() && data.size() >= other.data.size() && data.size() % other.data.size() == 0);
+		int broadcastFactor = static_cast<int>(data.size() / other.data.size());
+		for (int i = 0; i < broadcastFactor; i++) {
+			for (int j = 0; j < other.data.size(); j++) {
+				int dataIndex = static_cast<int>(i * other.data.size() + j);
+				data[dataIndex] += other.data[j];
+			}
 		}
-
-		return Tensor<T>(sum, dims);
 	}
 
 	/// <summary>
-	/// Subtracts two tensors of the same shape.
+	/// Subtracts two tensors of the same shape. Must specify return type as first template type.
 	/// </summary>
-	/// <typeparam name="U"></typeparam>
+	/// <typeparam name="U">Return type</typeparam>
+	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
 	/// <returns>The tensor of differences.</returns>
-	template <typename U>
-	Tensor<T> elementwiseSubtract(const Tensor<U> &other) const {
+	template <typename U, typename V>
+	Tensor<U> elementwiseSubtract(const Tensor<V> &other) const {
 		assert(dims == other.dims);
-		vector<T> difference;
-		difference.reserve(data.size());
+		vector<U> difference(data.size());
 		for (int i = 0; i < data.size(); i++) {
-			difference = data[i] - other.data[i];
+			// Only cast AFTER the operation has completed
+			difference[i] = static_cast<U>(data[i] - other.data[i]);
 		}
 
-		return Tensor<T>(difference, dims);
+		return Tensor<U>(difference, dims);
 	}
 
 	/// <summary>
-	/// Multiplies two tensors of the same shape, in an elementwise way (NOT matrix multiplication).
+	/// Subtracts two tensors of the same shape, in place.
+	/// (I.e. data -= other.data).
+	/// To store the result in other, see elementwiseSubtractInReversePlace.
+	/// (I.e. other.data = data - other.data).
 	/// </summary>
 	/// <typeparam name="U"></typeparam>
+	/// <param name="other"></param>
+	template <typename U>
+	void elementwiseSubtractInPlace(const Tensor<U> &other) {
+		assert(dims == other.dims);
+		for (int i = 0; i < data.size(); i++) {
+			data[i] -= other.data[i];
+		}
+	}
+
+	/// <summary>
+	/// Subtracts two tensors of the same shape, in place, storing the result in other.
+	/// (I.e. other.data = data - other.data).
+	/// To store the result in this tensor, see elementwiseSubtractInPlace.
+	/// (I.e. data -= other.data).
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <param name="other"></param>
+	template <typename U>
+	void elementwiseSubtractInReversePlace(Tensor<U> &other) const {
+		assert(dims == other.dims);
+		for (int i = 0; i < data.size(); i++) {
+			other.data[i] = data[i] - other.data[i];
+		}
+	}
+
+	/// <summary>
+	/// Multiplies two tensors of the same shape, in an elementwise way (NOT matrix multiplication). Must specify return type as first template type.
+	/// </summary>
+	/// <typeparam name="U">Return type</typeparam>
+	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
 	/// <returns>The tensor of products.</returns>
-	template <typename U>
-	Tensor<T> elementwiseMultiply(const Tensor<U> &other) const {
+	template <typename U, typename V>
+	Tensor<U> elementwiseMultiply(const Tensor<V> &other) const {
 		assert(dims == other.dims);
-		vector<T> product;
-		product.reserve(data.size());
+		vector<U> product(data.size());
 		for (int i = 0; i < data.size(); i++) {
-			product = data[i] * other.data[i];
+			// Only cast AFTER the operation has completed
+			product[i] = static_cast<U>(data[i] * other.data[i]);
 		}
 
-		return Tensor<T>(product, dims);
+		return Tensor<U>(product, dims);
 	}
 
 	/// <summary>
-	/// Divides two tensors of the same shape, in an elementwise way.
+	/// Multiplies two tensors of the same shape, in place.
+	/// (I.e. data *= other.data).
 	/// </summary>
 	/// <typeparam name="U"></typeparam>
 	/// <param name="other"></param>
-	/// <returns>The tensor of quotients.</returns>
 	template <typename U>
-	Tensor<T> elementwiseDivide(const Tensor<U> &other) const {
+	void elementwiseMultiplyInPlace(const Tensor<U> &other) {
 		assert(dims == other.dims);
-		vector<T> quotient;
-		quotient.reserve(data.size());
 		for (int i = 0; i < data.size(); i++) {
-			quotient = data[i] / other.data[i];
+			data[i] *= other.data[i];
+		}
+	}
+
+	/// <summary>
+	/// Divides two tensors of the same shape, in an elementwise way. Must specify return type as first template type.
+	/// </summary>
+	/// <typeparam name="U">Return type</typeparam>
+	/// <typeparam name="V"></typeparam>
+	/// <param name="other"></param>
+	/// <returns>The tensor of quotients.</returns>
+	template <typename U, typename V>
+	Tensor<U> elementwiseDivide(const Tensor<V> &other) const {
+		assert(dims == other.dims);
+		vector<U> quotient(data.size());
+		for (int i = 0; i < data.size(); i++) {
+			// Only cast AFTER the operation has completed
+			quotient[i] = static_cast<U>(data[i] / other.data[i]);
 		}
 
-		return Tensor<T>(quotient, dims);
+		return Tensor<U>(quotient, dims);
+	}
+
+	/// <summary>
+	/// Divides two tensors of the same shape, in place.
+	/// (I.e. data /= other.data).
+	/// To store the result in other, see elementwiseDivideInReversePlace.
+	/// (I.e. other.data = data / other.data).
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <param name="other"></param>
+	template <typename U>
+	void elementwiseDivideInPlace(const Tensor<U> &other) {
+		assert(dims == other.dims);
+		for (int i = 0; i < data.size(); i++) {
+			data[i] /= other.data[i];
+		}
+	}
+
+	/// <summary>
+	/// Divides two tensors of the same shape, in place, storing the result in other.
+	/// (I.e. other.data = data / other.data).
+	/// To store the result in this tensor, see elementwiseDivideInPlace.
+	/// (I.e. data /= other.data).
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <param name="other"></param>
+	template <typename U>
+	void elementwiseDivideInReversePlace(Tensor<U> &other) const {
+		assert(dims == other.dims);
+		for (int i = 0; i < data.size(); i++) {
+			other.data[i] = data[i] / other.data[i];
+		}
 	}
 
 	/// <summary>

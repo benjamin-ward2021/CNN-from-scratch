@@ -13,16 +13,16 @@ using std::default_random_engine, std::normal_distribution, std::uniform_real_di
 /// </summary>
 /// <typeparam name="T"></typeparam>
 template <typename T>
-class FullyConnected : public Layer {
+class FullyConnected : public Layer<T> {
 public:
-	FullyConnected(int inputSize, int outputSize, int rngSeed, Layer::WeightInitializationHeuristic weightInitializationHeuristic) : 
-		weights(Tensor<T>({ inputSize,outputSize })), biases(Tensor<T>({ outputSize })) {
+	FullyConnected(int inputSize, int outputSize, int rngSeed = 0, WeightInitializationHeuristic weightInitializationHeuristic = WeightInitializationHeuristic::heNormal)
+		: weights(Tensor<T>({ inputSize,outputSize })), biases(Tensor<T>({ outputSize })) {
 		default_random_engine randomEngine(rngSeed);
 
-		assert(weightInitializationHeuristic == Layer::WeightInitializationHeuristic::heNormal ||
-			weightInitializationHeuristic == Layer::WeightInitializationHeuristic::xavierUniform);
+		assert(weightInitializationHeuristic == WeightInitializationHeuristic::heNormal ||
+			weightInitializationHeuristic == WeightInitializationHeuristic::xavierUniform);
 
-		if (weightInitializationHeuristic == Layer::WeightInitializationHeuristic::heNormal) {
+		if (weightInitializationHeuristic == WeightInitializationHeuristic::heNormal) {
 			normal_distribution<T> normalDistribution(static_cast<T>(0), static_cast<T>(sqrt(2.0 / inputSize)));
 			// Set weights according to normal he initialization
 			for (int i = 0; i < inputSize; i++) {
@@ -37,7 +37,7 @@ public:
 			}
 		}
 
-		else if (weightInitializationHeuristic == Layer::WeightInitializationHeuristic::xavierUniform) {
+		else if (weightInitializationHeuristic == WeightInitializationHeuristic::xavierUniform) {
 			T bound = static_cast<T>(sqrt(6.0 / (inputSize + outputSize)));
 			uniform_real_distribution<T> uniformDistribution(-bound, bound);
 			// Set weights according to uniform xavier initialization
@@ -54,12 +54,24 @@ public:
 		}
 	}
 
-	// TODO: These functions
-	Tensor<double> forward(const Tensor<double> &input) override {
-		return Tensor<double>({ 1 });
+	/// <summary>
+	/// Performs forward propagation.
+	/// </summary>
+	/// <param name="input">A tensor of inputs. Typically either dims = { batchSize,inputSize } in the case of layers like FullyConnected,
+	/// or dims = { batchSize,height,width,depth } for layers like Convolutional or Pooling. Note that this function mutates input.</param>
+	/// <returns>A 2d tensor of dims = { batchSize,outputSize }</returns>
+	Tensor<T> forward(Tensor<T> &input) override {
+		// Input dims will become = { batchSize,inputSize }
+		input.reverseFlattenTo2d();
+		// Output dims will be = { batchSize,outputSize }
+		Tensor<T> output = input.matrixMultiply<T>(weights);
+		output.broadcastAddInPlace(biases);
+		return output;
 	}
-	Tensor<double> backward() override {
-		return Tensor<double>({ 1 });
+
+	// TODO: These functions
+	Tensor<T> backward() override {
+		return Tensor<T>({ 1 });
 	}
 	void save() override {
 
@@ -68,6 +80,8 @@ public:
 
 	}
 private:
+	// 2d tensor with dims = { inputSize,outputSize }
 	Tensor<T> weights;
+	// 1d tensor with dims = { outputSize }
 	Tensor<T> biases;
 };

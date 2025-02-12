@@ -5,14 +5,18 @@
 /// <summary>
 /// Base class for all layer types. 
 /// (Ex. FullyConnected, Convolutional, ReLU).
-/// All calculations are done using doubles, so no need to make this a class template.
+/// All layers in an architecture must share the same type.
 /// </summary>
+/// <typeparam name="T"></typeparam>
+template<typename T>
 class Layer {
 public:
-	// he recommended for ReLU. xavier recommended for sigmoid, tanh, softmax.
-	enum WeightInitializationHeuristic { heNormal, xavierUniform };
-	virtual Tensor<double> forward(const Tensor<double> &input) = 0;
-	virtual Tensor<double> backward() = 0;
+	// Note that layers are allowed to mutate the input during forward propagation.
+	virtual Tensor<T> forward(Tensor<T> &input) = 0;
+	virtual Tensor<T> backward() = 0;
 	virtual void save() = 0;
 	virtual void load() = 0;
 };
+
+// he recommended for ReLU. xavier recommended for sigmoid, tanh, softmax.
+enum WeightInitializationHeuristic { heNormal, xavierUniform };
