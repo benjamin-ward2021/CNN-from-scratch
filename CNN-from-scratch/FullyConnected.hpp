@@ -16,7 +16,7 @@ template <typename T>
 class FullyConnected : public Layer<T> {
 public:
 	FullyConnected(int inputSize, int outputSize, int rngSeed = 0, WeightInitializationHeuristic weightInitializationHeuristic = WeightInitializationHeuristic::heNormal)
-		: weights(Tensor<T>({ inputSize,outputSize })), biases(Tensor<T>({ outputSize })) {
+		: weights(Tensor<T>({ inputSize,outputSize })), biases(Tensor<T>({ outputSize })), input(Tensor<T>({ 0 })) {
 		default_random_engine randomEngine(rngSeed);
 
 		assert(weightInitializationHeuristic == WeightInitializationHeuristic::heNormal ||
@@ -63,25 +63,51 @@ public:
 	Tensor<T> forward(Tensor<T> &input) override {
 		// Input dims will become = { batchSize,inputSize }
 		input.reverseFlattenTo2d();
+		this->input = input;
 		// Output dims will be = { batchSize,outputSize }
 		Tensor<T> output = input.matrixMultiply<T>(weights);
 		output.broadcastAddInPlace(biases);
 		return output;
 	}
 
-	// TODO: These functions
-	Tensor<T> backward() override {
-		return Tensor<T>({ 1 });
+	/// <summary>
+	/// Performs backward propagation and updates weights and biases.
+	/// </summary>
+	/// <param name="gradWrtOutput">The gradient of loss with respect to the output of this layer. Dims = { batchSize,outputSize }.</param>
+	/// <returns>The gradient of loss with respect to the input of this layer. Dims = { batchSize,inputSize }.</returns>
+	Tensor<T> backward(const Tensor<T> &gradWrtOutput) override {
+		assert(input != Tensor<T>({ 0 }));
+		// input has dims = { batchSize,inputSize }, so input.transpose() has dims = { inputSize,batchSize }
+		// gradWrtWeights (gradient of loss with respect to weights) has dims = { intputSize,outputSize }
+		Tensor<T> gradWrtWeights = input.transpose().matrixMultiply<T>(gradWrtOutput);
+
+		// gradWrtBiases (gradient of loss with respect to biases) has dims = { outputSize }
+		Tensor<T> gradWrtBiases = gradWrtOutput.matrixColumnSum();
+
+		// gradWrtInput (gradient of loss with respect to input) has dims = { batchSize,inputSize }
+		// Make sure to initialize this before updating weights
+		Tensor<T> gradWrtInput = gradWrtOutput.matrixMultiply<T>(weights.transpose());
+
+		// TODO: Update weights
+
+		return gradWrtInput;
 	}
+
+	// TODO: These functions
 	void save() override {
 
 	}
 	void load() override {
 
 	}
+
 private:
 	// 2d tensor with dims = { inputSize,outputSize }
 	Tensor<T> weights;
+
 	// 1d tensor with dims = { outputSize }
 	Tensor<T> biases;
+
+	// 2d tensor with dims = { batchSize,inputSize }
+	Tensor<T> input;
 };

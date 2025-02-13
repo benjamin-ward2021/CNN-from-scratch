@@ -16,9 +16,13 @@ void testMatrixMultiplication2();
 void testElementwiseAdd();
 void testBroadcastAdd();
 void testFullyConnectedForward();
+void testTranspose();
+void testMatrixRowSum();
+void testMatrixColumnSum();
+void testFullyConnectedBackward();
 
 int main() {
-	testFullyConnectedForward();
+	testTranspose();
 	//MNISTLoader trainData("MNIST Data\\train-images.idx3-ubyte", "MNIST Data\\train-labels.idx1-ubyte", 100); // TODO: Change to 60000
 	//trainData.printData(0, 10);
 	//testMatrixMultiplication();
@@ -67,7 +71,7 @@ void testMatrixMultiplication() {
 void testMatrixMultiplication2() {
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration;
-	Tensor<double> t1({ 32,10000 });
+	Tensor<double> t1({ 32,5000 });
 	t1.set({ 0,0 }, 0);
 	t1.set({ 0,1 }, 1);
 	t1.set({ 0,2 }, 2.1);
@@ -75,7 +79,7 @@ void testMatrixMultiplication2() {
 	t1.set({ 1,1 }, 3);
 	t1.set({ 1,2 }, 5.25);
 
-	Tensor<double> t2({ 10000,3000 });
+	Tensor<double> t2({ 5000,2500 });
 	t2.set({ 0,0 }, 1.5);
 	t2.set({ 1,0 }, 3);
 	t2.set({ 2,0 }, 5.5);
@@ -159,6 +163,7 @@ void testBroadcastAdd() {
 	//assert(t3.get({ 0 }) == 14.55 && t3.get({ 1 }) == 40.125);
 }
 
+// TODO: Actually make a test case that asserts if the output is correct
 void testFullyConnectedForward() {
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration;
@@ -175,6 +180,126 @@ void testFullyConnectedForward() {
 		//t1.elementwiseAdd<double>(t2);
 		//t1.elementwiseAddInPlace(t2);
 		auto t3 = fc.forward(t2);
+	}
+
+	auto time2 = high_resolution_clock::now();
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << ms_double.count() << "ms\n";
+}
+
+
+void testTranspose() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+	Tensor<double> t1({ 5000,2500 });
+	t1.set({ 0,0 }, 3.2);
+	t1.set({ 0,1 }, 1);
+	t1.set({ 0,2 }, 2.1);
+	t1.set({ 1,0 }, 1.5);
+	t1.set({ 1,1 }, 3);
+	t1.set({ 1,2 }, 5.25);
+
+	Tensor<float> t2({ 3 });
+	t2.set({ 0 }, 1.5);
+	t2.set({ 1 }, 3.5);
+	t2.set({ 2 }, 4.0);
+
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAddInPlace(t2);
+		auto t3 = t1.transpose();
+	}
+
+	auto time2 = high_resolution_clock::now();
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << ms_double.count() << "ms\n";
+}
+
+void testMatrixRowSum() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+	Tensor<double> t1({ 32,5000 });
+	t1.set({ 0,0 }, 3.2);
+	t1.set({ 0,1 }, 1);
+	t1.set({ 0,2 }, 2.1);
+	t1.set({ 1,0 }, 1.5);
+	t1.set({ 1,1 }, 3);
+	t1.set({ 1,2 }, 5.25);
+
+	Tensor<float> t2({ 3 });
+	t2.set({ 0 }, 1.5);
+	t2.set({ 1 }, 3.5);
+	t2.set({ 2 }, 4.0);
+
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAddInPlace(t2);
+		auto t3 = t1.matrixRowSum();
+	}
+
+	auto time2 = high_resolution_clock::now();
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << ms_double.count() << "ms\n";
+}
+
+void testMatrixColumnSum() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+	Tensor<double> t1({ 32,5000 });
+	t1.set({ 0,0 }, 3.2);
+	t1.set({ 0,1 }, 1);
+	t1.set({ 0,2 }, 2.1);
+	t1.set({ 1,0 }, 1.5);
+	t1.set({ 1,1 }, 3);
+	t1.set({ 1,2 }, 5.25);
+
+	Tensor<float> t2({ 3 });
+	t2.set({ 0 }, 1.5);
+	t2.set({ 1 }, 3.5);
+	t2.set({ 2 }, 4.0);
+
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAddInPlace(t2);
+		auto t3 = t1.matrixColumnSum();
+	}
+
+	auto time2 = high_resolution_clock::now();
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << ms_double.count() << "ms\n";
+}
+
+void testFullyConnectedBackward() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+
+	FullyConnected<double> fc(2, 1);
+
+	Tensor<double> t2({ 1,2 });
+	t2.set({ 0,0 }, 2);
+	t2.set({ 0,1 }, 3);
+
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 100000; i++) {
+		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAddInPlace(t2);
+		auto t3 = fc.forward(t2);
+		auto t4 = fc.backward(t2);
 	}
 
 	auto time2 = high_resolution_clock::now();

@@ -41,6 +41,14 @@ public:
 		assert(data.size() == size);
 	}
 
+	bool operator==(const Tensor<T> &other) const {
+		return data == other.data && dims == other.dims && coordinateConversionLookupTable == other.coordinateConversionLookupTable;
+	}
+
+	bool operator!=(const Tensor<T> &other) const {
+		return !(*this == other);
+	}
+
 	// TODO: Should there also be a constructor for moving data instead of copying it?
 	// See https://en.cppreference.com/w/cpp/utility/move
 
@@ -120,7 +128,7 @@ public:
 	/// <typeparam name="U"></typeparam>
 	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
-	/// <param name="blockSize"></param>
+	/// <param name="blockSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
 	/// <returns></returns>
 	template <typename U, typename V>
 	Tensor<U> matrixMultiply(const Tensor<V> &other, const int blockSize = 112) const {
@@ -138,10 +146,10 @@ public:
 				int j_max = min(j + blockSize, N);
 				for (int k = 0; k < K; k += blockSize) {
 					int k_max = min(k + blockSize, K);
-					for (int ii = i; ii < i_max; ++ii) {
-						for (int kk = k; kk < k_max; ++kk) {
+					for (int ii = i; ii < i_max; ii++) {
+						for (int kk = k; kk < k_max; kk++) {
 							T a_val = data[ii * K + kk];
-							for (int jj = j; jj < j_max; ++jj) {
+							for (int jj = j; jj < j_max; jj++) {
 								product.data[ii * N + jj] += a_val * other.data[kk * N + jj];
 							}
 						}
@@ -152,6 +160,62 @@ public:
 
 		// Uses NRVO
 		return product;
+	}
+
+	/// <summary>
+	/// Transposes the matrix by changing the data, rather than changing the indexing.
+	/// Uses a tiling approach, which improves caching hit rate.
+	/// </summary>
+	/// <param name="blockSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
+	/// <returns></returns>
+	Tensor<T> transpose(const int blockSize = 112) const {
+		assert(dims.size() == 2);
+		int rows = dims[0];
+		int cols = dims[1];
+		Tensor<T> transposed({ cols,rows });
+		for (int i = 0; i < rows; i += blockSize) {
+			int i_max = min(i + blockSize, rows);
+			for (int j = 0; j < cols; j += blockSize) {
+				int j_max = min(j + blockSize, cols);
+				for (int ii = i; ii < i_max; ii++) {
+					for (int jj = j; jj < j_max; jj++) {
+						transposed.data[jj * rows + ii] = data[ii * cols + jj];
+					}
+				}
+			}
+		}
+
+		return transposed;
+	}
+
+	/// <summary>
+	/// Sums the rows of a matrix together.
+	/// </summary>
+	/// <returns></returns>
+	Tensor<T> matrixRowSum() const {
+		assert(dims.size() == 2);
+		int rows = dims[0];
+		int cols = dims[1];
+		Tensor<T> sum({ rows });
+		for (int i = 0; i < rows; i++) {
+			T value = 0;
+			for (int j = 0; j < cols; j++) {
+				value += data[i * cols + j];
+			}
+
+			sum.data[i] = value;
+		}
+
+		return sum;
+	}
+	
+	/// <summary>
+	/// Sums the columns of a matrix together.
+	/// </summary>
+	/// <returns></returns>
+	Tensor<T> matrixColumnSum() const {
+		assert(dims.size() == 2);
+		return this->transpose().matrixRowSum();
 	}
 
 	/// <summary>
