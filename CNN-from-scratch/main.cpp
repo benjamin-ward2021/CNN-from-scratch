@@ -168,7 +168,7 @@ void testFullyConnectedForward() {
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration;
 
-	FullyConnected<double> fc(2, 1);
+	FullyConnected<double> fc(2, 1, 0.01);
 
 	Tensor<double> t2({ 1,2 });
 	t2.set({ 0,0 }, 2);
@@ -287,7 +287,7 @@ void testFullyConnectedBackward() {
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration;
 
-	FullyConnected<double> fc(2, 1);
+	FullyConnected<double> fc(2, 1, 0,01);
 
 	Tensor<double> t2({ 1,2 });
 	t2.set({ 0,0 }, 2);

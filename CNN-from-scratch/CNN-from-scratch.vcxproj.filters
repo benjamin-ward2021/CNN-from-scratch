@@ -38,6 +38,9 @@
     <ClInclude Include="FullyConnected.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ReLU.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="MNIST Data\t10k-images.idx3-ubyte">

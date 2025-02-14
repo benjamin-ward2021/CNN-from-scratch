@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 
-using std::vector, std::cout, std::endl, std::string, std::min;
+using std::vector, std::cout, std::endl, std::string, std::min, std::max;
 
 /// <summary>
 /// A multidimensional array.
@@ -17,6 +17,11 @@ public:
 	// All types of tensors are friends with all other types of tensors, and can access their private variables.
 	// (Ex. Tensor<float> can access dims of a Tensor<int>).
 	friend class Tensor;
+
+	/// <summary>
+	/// Default constructor does nothing.
+	/// </summary>
+	Tensor() {}
 
 	/// <summary>
 	/// Initializes data with each element being the default value.
@@ -158,7 +163,6 @@ public:
 			}
 		}
 
-		// Uses NRVO
 		return product;
 	}
 
@@ -238,6 +242,20 @@ public:
 	}
 
 	/// <summary>
+	/// Adds two tensors of the same shape, in place.
+	/// (I.e. data += other.data).
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <param name="other"></param>
+	template <typename U>
+	void elementwiseAddInPlace(const Tensor<U> &other) {
+		assert(dims == other.dims);
+		for (int i = 0; i < data.size(); i++) {
+			data[i] += other.data[i];
+		}
+	}
+
+	/// <summary>
 	/// Adds two tensors together, where if other has fewer dimensions than this, it gets broadcasted up.
 	/// Must specify return type as first template type.
 	/// Note that this doesn't actually check that the dimensions are compatible; it only asserts that the data sizes are compatible.
@@ -259,20 +277,6 @@ public:
 		}
 
 		return Tensor<U>(sum, dims);
-	}
-
-	/// <summary>
-	/// Adds two tensors of the same shape, in place.
-	/// (I.e. data += other.data).
-	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <param name="other"></param>
-	template <typename U>
-	void elementwiseAddInPlace(const Tensor<U> &other)  {
-		assert(dims == other.dims);
-		for (int i = 0; i < data.size(); i++) {
-			data[i] += other.data[i];
-		}
 	}
 
 	/// <summary>
@@ -331,6 +335,26 @@ public:
 	}
 
 	/// <summary>
+	/// Subtracts two tensors in place, where if other has fewer dimensions than this, it gets broadcasted up.
+	/// See https://www.geeksforgeeks.org/tensor-broadcasting/
+	/// Note that this doesn't actually check that the dimensions are compatible; it only asserts that the data sizes are compatible.
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <param name="other"></param>
+	/// <returns>The tensor of differences.</returns>
+	template <typename U>
+	void broadcastSubtractInPlace(const Tensor<U> &other) {
+		assert(dims.size() >= other.dims.size() && data.size() >= other.data.size() && data.size() % other.data.size() == 0);
+		int broadcastFactor = static_cast<int>(data.size() / other.data.size());
+		for (int i = 0; i < broadcastFactor; i++) {
+			for (int j = 0; j < other.data.size(); j++) {
+				int dataIndex = static_cast<int>(i * other.data.size() + j);
+				data[dataIndex] -= other.data[j];
+			}
+		}
+	}
+
+	/// <summary>
 	/// Subtracts two tensors of the same shape, in place, storing the result in other.
 	/// (I.e. other.data = data - other.data).
 	/// To store the result in this tensor, see elementwiseSubtractInPlace.
@@ -377,6 +401,20 @@ public:
 		for (int i = 0; i < data.size(); i++) {
 			data[i] *= other.data[i];
 		}
+	}
+
+	/// <summary>
+	/// Multiplies a tensor with a scalar.
+	/// </summary>
+	/// <param name="multiplier"></param>
+	/// <returns>The tensor of products.</returns>
+	Tensor<T> scalarMultiply(T multiplier) {
+		Tensor<T> product(dims);
+		for (int i = 0; i < data.size(); i++) {
+			product.data[i] = data[i] * multiplier;
+		}
+
+		return product;
 	}
 
 	/// <summary>
@@ -427,6 +465,28 @@ public:
 		assert(dims == other.dims);
 		for (int i = 0; i < data.size(); i++) {
 			other.data[i] = data[i] / other.data[i];
+		}
+	}
+	
+	/// <summary>
+	/// Clamps data to 0 if it is negative.
+	/// </summary>
+	/// <returns></returns>
+	Tensor<T> relu() {
+		Tensor<T> ret(dims);
+		for (int i = 0; i < data.size(); i++) {
+			ret.data[i] = max(static_cast<T>(0), data[i]);
+		}
+	}
+
+	/// <summary>
+	/// Returns a tensor whose ith entry is 1 if data[i] > 0, and 0 otherwise.
+	/// </summary>
+	/// <returns></returns>
+	Tensor<T> reluDerivative() {
+		Tensor<T> ret(dims);
+		for (int i = 0; i < data.size(); i++) {
+			ret.data[i] = data[i] > static_cast<T>(0) ? static_cast<T>(1) : static_cast<T>(0);
 		}
 	}
 
