@@ -4,8 +4,9 @@
 #include <cassert>
 #include <iostream>
 #include <string>
+#include <random>
 
-using std::vector, std::cout, std::endl, std::string, std::min, std::max;
+using std::vector, std::cout, std::endl, std::string, std::min, std::max, std::default_random_engine, std::normal_distribution, std::uniform_real_distribution;
 
 /// <summary>
 /// A multidimensional array.
@@ -76,6 +77,39 @@ public:
 	void set(const vector<int> &indices, T value) {
 		int flattenedIndex = getFlattenedIndex(indices);
 		data[flattenedIndex] = value;
+	}
+
+	/// <summary>
+	/// Sets all elements in the tensor to a random value using the normal distribution and random engine.
+	/// Parameters are passed by mutable reference and can be changed.
+	/// </summary>
+	/// <param name="normalDistribution"></param>
+	/// <param name="randomEngine"></param>
+	void setToRandom(normal_distribution<T> normalDistribution, default_random_engine randomEngine) {
+		for (int i = 0; i < data.size(); i++) {
+			data[i] = normalDistribution(randomEngine);
+		}
+	}
+
+	/// <summary>
+	/// Sets all elements in a tensor to a random value using the uniform distribution and random engine.
+	/// Parameters are passed by mutable reference and can be changed.
+	/// </summary>
+	/// <param name="uniformDistribution"></param>
+	/// <param name="randomEngine"></param>
+	void setToRandom(uniform_real_distribution<T> &uniformDistribution, default_random_engine &randomEngine) {
+		for (int i = 0; i < data.size(); i++) {
+			data[i] = uniformDistribution(randomEngine);
+		}
+	}
+
+	/// <summary>
+	/// Sets all elements to 0.
+	/// </summary>
+	void setToZero() {
+		for (int i = 0; i < data.size(); i++) {
+			data[i] = static_cast<T>(0);
+		}
 	}
 
 	/// <summary>

@@ -16,13 +16,14 @@ void testMatrixMultiplication2();
 void testElementwiseAdd();
 void testBroadcastAdd();
 void testFullyConnectedForward();
+void testFullyConnectedForward2();
 void testTranspose();
 void testMatrixRowSum();
 void testMatrixColumnSum();
 void testFullyConnectedBackward();
 
 int main() {
-	testTranspose();
+	testFullyConnectedForward2();
 	//MNISTLoader trainData("MNIST Data\\train-images.idx3-ubyte", "MNIST Data\\train-labels.idx1-ubyte", 100); // TODO: Change to 60000
 	//trainData.printData(0, 10);
 	//testMatrixMultiplication();
@@ -189,6 +190,35 @@ void testFullyConnectedForward() {
 	std::cout << ms_double.count() << "ms\n";
 }
 
+void testFullyConnectedForward2() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+
+	FullyConnected<double> fc(5000, 5000, 0.001);
+
+	Tensor<double> t2({ 32,5000 });
+	Tensor<double> t3({ 32,5000 });
+	std::uniform_real_distribution<double> uniform(0.0, static_cast<double>(sqrt(2.0 / 10)));
+	std::default_random_engine engine(1);
+	t2.setToRandom(uniform, engine);
+	t3.setToRandom(uniform, engine);
+
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAddInPlace(t2);
+		fc.forward(t2);
+		fc.backward(t3);
+	}
+
+	auto time2 = high_resolution_clock::now();
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << ms_double.count() << "ms\n";
+}
+
 
 void testTranspose() {
 	using std::chrono::high_resolution_clock;
@@ -207,7 +237,7 @@ void testTranspose() {
 	t2.set({ 2 }, 4.0);
 
 	auto time1 = high_resolution_clock::now();
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 100; i++) {
 		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
 		//t1.elementwiseAdd<double>(t2);
 		//t1.elementwiseAddInPlace(t2);

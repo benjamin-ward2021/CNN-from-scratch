@@ -25,32 +25,20 @@ public:
 		if (weightInitializationHeuristic == WeightInitializationHeuristic::heNormal) {
 			normal_distribution<T> normalDistribution(static_cast<T>(0), static_cast<T>(sqrt(2.0 / inputSize)));
 			// Set weights according to normal he initialization
-			for (int i = 0; i < inputSize; i++) {
-				for (int j = 0; j < outputSize; j++) {
-					weights.set({ i,j }, normalDistribution(randomEngine));
-				}
-			}
+			weights.setToRandom(normalDistribution, randomEngine);
 
 			// Set biases to 0. Note that this is redundant since when the tensor is created, all values are initialized to 0
-			for (int i = 0; i < outputSize; i++) {
-				biases.set({ i }, static_cast<T>(0));
-			}
+			biases.setToZero();
 		}
 
 		else if (weightInitializationHeuristic == WeightInitializationHeuristic::xavierUniform) {
 			T bound = static_cast<T>(sqrt(6.0 / (inputSize + outputSize)));
 			uniform_real_distribution<T> uniformDistribution(-bound, bound);
 			// Set weights according to uniform xavier initialization
-			for (int i = 0; i < inputSize; i++) {
-				for (int j = 0; j < outputSize; j++) {
-					weights.set({ i,j }, uniformDistribution(randomEngine));
-				}
-			}
+			weights.setToRandom(uniformDistribution, randomEngine);
 
 			// Set biases to 0. Note that this is redundant since when the tensor is created, all values are initialized to 0
-			for (int i = 0; i < outputSize; i++) {
-				biases.set({ i }, static_cast<T>(0));
-			}
+			biases.setToZero();
 		}
 	}
 
