@@ -2,8 +2,8 @@
 
 #include <random>
 
-#include "Layer.hpp"
-#include "Tensor.hpp"
+#include "Layer.cuh"
+#include "Tensor.cuh"
 
 using std::default_random_engine, std::normal_distribution, std::uniform_real_distribution;
 
@@ -56,7 +56,7 @@ public:
 		// If Y = outputs, W = weights, X = inputs, B = biases...
 		// Y = X * W + B
 		// output dims will be = { batchSize,outputSize }
-		Tensor<T> output = input.matrixMultiply<T>(weights);
+		Tensor<T> output = input.template matrixMultiply<T>(weights);
 		output.broadcastAddInPlace(biases);
 		return output;
 	}
@@ -68,14 +68,16 @@ public:
 	/// <returns>The gradient of loss with respect to the input of this layer. Dims = { batchSize,inputSize }.</returns>
 	Tensor<T> backward(const Tensor<T> &gradWrtOutput) override {
 		// Note that we have to explicitly use the "this" keyword with input since it is a dependent name.
+		// We have to call matrixMultiply with the "template" keyword for the same reason.
 		// See https://stackoverflow.com/questions/1527849/how-do-you-understand-dependent-names-in-c
+		// and https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
 		assert(this->input != Tensor<T>());
 
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dW = dL/dY * dY/dW. Since Y = X * W + B, dY/dW = X. So dL/dW = transpose(X) * dL/dY.
 		// input has dims = { batchSize,inputSize }, so input.transpose() has dims = { inputSize,batchSize }
 		// gradWrtWeights (gradient of loss with respect to weights) has dims = { intputSize,outputSize }
-		Tensor<T> gradWrtWeights = this->input.transpose().matrixMultiply<T>(gradWrtOutput);
+		Tensor<T> gradWrtWeights = this->input.transpose().template matrixMultiply<T>(gradWrtOutput);
 
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dB = dL/dY * dY/dB. Since Y = X * W + B, dY/dB = 1. So dL/dB = 1 * dL/dY.
@@ -85,7 +87,7 @@ public:
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dX = dL/dY * dY/dX. Since Y = X * W + B, dY/dX = W. So dL/dX = dL/dY * transpose(W).
 		// gradWrtInput (gradient of loss with respect to input) has dims = { batchSize,inputSize }
-		Tensor<T> gradWrtInput = gradWrtOutput.matrixMultiply<T>(weights.transpose());
+		Tensor<T> gradWrtInput = gradWrtOutput.template matrixMultiply<T>(weights.transpose());
 
 		// Update weights and biases
 		weights.elementwiseSubtractInPlace(gradWrtWeights.scalarMultiply(learningRate));

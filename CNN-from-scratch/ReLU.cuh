@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Layer.hpp"
-#include "Tensor.hpp"
+#include "Layer.cuh"
+#include "Tensor.cuh"
 
 /// <summary>
 /// A ReLU (Rectified Linear Unit) layer. 

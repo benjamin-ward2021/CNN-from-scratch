@@ -1,10 +1,10 @@
-#include "MNISTLoader.hpp"
+#include "MNISTLoader.cuh"
 
 #include <fstream>
 #include <string>
 #include <cassert>
 
-#include "Tensor.hpp"
+#include "Tensor.cuh"
 
 using std::string, std::ifstream, std::ios;
 
@@ -109,7 +109,8 @@ void MNISTLoader::loadLabels(string path, int maxAmount) {
 /// Converts the next 4 bytes to an integer value.
 /// </summary>
 /// <param name="bytes"></param>
-/// <returns>The integer representation of the memory</returns>
+/// <returns>The integer representation of the memory.</returns>
+[[nodiscard]]
 int MNISTLoader::convertBytesToInt(char *bytes) {
 	return ((bytes[0] & 0xff) << 24) | ((bytes[1] & 0xff) << 16) |
 		   ((bytes[2] & 0xff) << 8)  | ((bytes[3] & 0xff) << 0);

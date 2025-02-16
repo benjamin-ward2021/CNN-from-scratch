@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Tensor.hpp"
+#include "Tensor.cuh"
 
 /// <summary>
 /// Base class for all layer types. 

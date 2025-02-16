@@ -6,6 +6,11 @@
 #include <string>
 #include <random>
 
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+
+#include "TensorKernels.cuh"
+
 using std::vector, std::cout, std::endl, std::string, std::min, std::max, std::default_random_engine, std::normal_distribution, std::uniform_real_distribution;
 
 /// <summary>
@@ -17,6 +22,7 @@ class Tensor {
 public:
 	// All types of tensors are friends with all other types of tensors, and can access their private variables.
 	// (Ex. Tensor<float> can access dims of a Tensor<int>).
+	template <typename U>
 	friend class Tensor;
 
 	/// <summary>
@@ -64,6 +70,7 @@ public:
 	/// </summary>
 	/// <param name="indices"></param>
 	/// <returns>The element at the specified indices.</returns>
+	[[nodiscard]]
 	T get(const vector<int> &indices) const {
 		int flattenedIndex = getFlattenedIndex(indices);
 		return data[flattenedIndex];
@@ -116,6 +123,7 @@ public:
 	/// Gets the dimensions
 	/// </summary>
 	/// <returns></returns>
+	[[nodiscard]]
 	vector<int> getDims() const {
 		return dims;
 	}
@@ -167,24 +175,26 @@ public:
 	/// <typeparam name="U"></typeparam>
 	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
-	/// <param name="blockSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
+	/// <param name="tileSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
 	/// <returns></returns>
 	template <typename U, typename V>
-	Tensor<U> matrixMultiply(const Tensor<V> &other, const int blockSize = 112) const {
+	[[nodiscard]]
+	Tensor<U> matrixMultiply(const Tensor<V> &other, const int tileSize = 112) const {
 		assert(dims.size() == 2 && other.dims.size() == 2);
 		assert(dims[1] == other.dims[0]);
+		// this = M * K, other = K * N, product = M * N
 		int M = dims[0];
 		int N = other.dims[1];
 		int K = dims[1];
 
 		Tensor<U> product({ M, N });
 
-		for (int i = 0; i < M; i += blockSize) {
-			int i_max = min(i + blockSize, M);
-			for (int j = 0; j < N; j += blockSize) {
-				int j_max = min(j + blockSize, N);
-				for (int k = 0; k < K; k += blockSize) {
-					int k_max = min(k + blockSize, K);
+		for (int i = 0; i < M; i += tileSize) {
+			int i_max = min(i + tileSize, M);
+			for (int j = 0; j < N; j += tileSize) {
+				int j_max = min(j + tileSize, N);
+				for (int k = 0; k < K; k += tileSize) {
+					int k_max = min(k + tileSize, K);
 					for (int ii = i; ii < i_max; ii++) {
 						for (int kk = k; kk < k_max; kk++) {
 							T a_val = data[ii * K + kk];
@@ -201,20 +211,86 @@ public:
 	}
 
 	/// <summary>
+	/// Performs matrix multiplication on the GPU using CUDA. 
+	/// Big credit to https://0mean1sigma.com/chapter-4-memory-coalescing-and-tiled-matrix-multiplication/,
+	/// I recommend his whole video series found here https://www.youtube.com/@0mean1sigma/videos
+	/// </summary>
+	/// <param name="other"></param>
+	/// <param name="tileSize">32 is the max, since CUDA supports 1024 threads per block (32 * 32 = 1024).</param>
+	/// <returns></returns>
+	[[nodiscard]]
+	Tensor<T> matrixMultiplyGPU(const Tensor<T> &other, const int tileSize = 32) const {
+		assert(dims.size() == 2 && other.dims.size() == 2);
+		assert(dims[1] == other.dims[0]);
+		// The max threads per block that CUDA allows is 1024
+		assert(tileSize * tileSize <= 1024);
+		// this = M * K, other = K * N, product = M * N
+		int M = dims[0];
+		int K = dims[1];
+		int N = other.dims[1];
+
+		Tensor<T> product({ M, N });
+
+		// Allocate and copy this objects data to GPU memory
+		T *deviceData;
+		cudaError_t deviceDataMallocStatus = cudaMalloc((void **)&deviceData, M * K * sizeof(T));
+		checkCuda(deviceDataMallocStatus);
+		cudaError_t deviceDataMemcpyStatus = cudaMemcpy(deviceData, data.data(), M * K * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceDataMemcpyStatus);
+
+		// Allocate and copy the other tensors data to GPU memory
+		T *deviceOtherData;
+		cudaError_t deviceOtherDataMallocStatus = cudaMalloc((void **)&deviceOtherData, K * N * sizeof(T));
+		checkCuda(deviceOtherDataMallocStatus);
+		cudaError_t deviceOtherDataMemcpyStatus = cudaMemcpy(deviceOtherData, other.data.data(), K * N * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceOtherDataMemcpyStatus);
+
+		// Allocate space for the result of the matrix multiplication
+		T *deviceProductData;
+		cudaError_t deviceProductDataMallocStatus = cudaMalloc((void **)&deviceProductData, M * N * sizeof(T));
+		checkCuda(deviceProductDataMallocStatus);
+
+		// Define arguments for kernel
+		dim3 dim_block(tileSize, tileSize, 1);
+		dim3 dim_grid((N + tileSize - 1) / tileSize, (M + tileSize - 1) / tileSize, 1);
+		size_t sharedMemorySize = 2 * tileSize * tileSize * sizeof(T);
+
+		// Call kernel
+		TensorKernels::matrixMultiplyGPUKernel<<<dim_grid, dim_block, sharedMemorySize>>>(deviceData, deviceOtherData, deviceProductData, M, K, N, tileSize);
+		// Check for kernel launch errors
+		cudaError_t kernelLaunchStatus = cudaGetLastError();
+		checkCuda(kernelLaunchStatus);
+
+		// Copy back results into product
+		cudaError_t deviceProductDataMemcpyStatus = cudaMemcpy(product.data.data(), deviceProductData, M * N * sizeof(T), cudaMemcpyDeviceToHost);
+		checkCuda(deviceProductDataMemcpyStatus);
+
+		// Free memory
+		cudaFree(deviceData);
+		cudaFree(deviceOtherData);
+		cudaFree(deviceProductData);
+
+		return product;
+	}
+
+	
+
+	/// <summary>
 	/// Transposes the matrix by changing the data, rather than changing the indexing.
 	/// Uses a tiling approach, which improves caching hit rate.
 	/// </summary>
-	/// <param name="blockSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
+	/// <param name="tileSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
 	/// <returns></returns>
-	Tensor<T> transpose(const int blockSize = 112) const {
+	[[nodiscard]]
+	Tensor<T> transpose(const int tileSize = 112) const {
 		assert(dims.size() == 2);
 		int rows = dims[0];
 		int cols = dims[1];
 		Tensor<T> transposed({ cols,rows });
-		for (int i = 0; i < rows; i += blockSize) {
-			int i_max = min(i + blockSize, rows);
-			for (int j = 0; j < cols; j += blockSize) {
-				int j_max = min(j + blockSize, cols);
+		for (int i = 0; i < rows; i += tileSize) {
+			int i_max = min(i + tileSize, rows);
+			for (int j = 0; j < cols; j += tileSize) {
+				int j_max = min(j + tileSize, cols);
 				for (int ii = i; ii < i_max; ii++) {
 					for (int jj = j; jj < j_max; jj++) {
 						transposed.data[jj * rows + ii] = data[ii * cols + jj];
@@ -230,6 +306,7 @@ public:
 	/// Sums the rows of a matrix together.
 	/// </summary>
 	/// <returns></returns>
+	[[nodiscard]]
 	Tensor<T> matrixRowSum() const {
 		assert(dims.size() == 2);
 		int rows = dims[0];
@@ -251,6 +328,7 @@ public:
 	/// Sums the columns of a matrix together.
 	/// </summary>
 	/// <returns></returns>
+	[[nodiscard]]
 	Tensor<T> matrixColumnSum() const {
 		assert(dims.size() == 2);
 		return this->transpose().matrixRowSum();
@@ -264,6 +342,7 @@ public:
 	/// <param name="other"></param>
 	/// <returns>The tensor of sums.</returns>
 	template <typename U, typename V>
+	[[nodiscard]]
 	Tensor<U> elementwiseAdd(const Tensor<V> &other) const {
 		assert(dims == other.dims);
 		vector<U> sum(data.size());
@@ -299,6 +378,7 @@ public:
 	/// <param name="other"></param>
 	/// <returns>The tensor of sums.</returns>
 	template <typename U, typename V>
+	[[nodiscard]]
 	Tensor<U> broadcastAdd(const Tensor<V> &other) const {
 		assert(dims >= other.dims && data.size() >= other.data.size() && data.size() % other.data.size() == 0);
 		vector<U> sum(data.size());
@@ -341,6 +421,7 @@ public:
 	/// <param name="other"></param>
 	/// <returns>The tensor of differences.</returns>
 	template <typename U, typename V>
+	[[nodiscard]]
 	Tensor<U> elementwiseSubtract(const Tensor<V> &other) const {
 		assert(dims == other.dims);
 		vector<U> difference(data.size());
@@ -412,6 +493,7 @@ public:
 	/// <param name="other"></param>
 	/// <returns>The tensor of products.</returns>
 	template <typename U, typename V>
+	[[nodiscard]]
 	Tensor<U> elementwiseMultiply(const Tensor<V> &other) const {
 		assert(dims == other.dims);
 		vector<U> product(data.size());
@@ -442,6 +524,7 @@ public:
 	/// </summary>
 	/// <param name="multiplier"></param>
 	/// <returns>The tensor of products.</returns>
+	[[nodiscard]]
 	Tensor<T> scalarMultiply(T multiplier) {
 		Tensor<T> product(dims);
 		for (int i = 0; i < data.size(); i++) {
@@ -459,6 +542,7 @@ public:
 	/// <param name="other"></param>
 	/// <returns>The tensor of quotients.</returns>
 	template <typename U, typename V>
+	[[nodiscard]]
 	Tensor<U> elementwiseDivide(const Tensor<V> &other) const {
 		assert(dims == other.dims);
 		vector<U> quotient(data.size());
@@ -503,10 +587,10 @@ public:
 	}
 	
 	/// <summary>
-	/// Clamps data to 0 if it is negative.
 	/// </summary>
-	/// <returns></returns>
-	Tensor<T> relu() {
+	/// <returns>A tensor where data is clamped to 0 if it is negative.</returns>
+	[[nodiscard]]
+	Tensor<T> relu() const {
 		Tensor<T> ret(dims);
 		for (int i = 0; i < data.size(); i++) {
 			ret.data[i] = max(static_cast<T>(0), data[i]);
@@ -514,10 +598,10 @@ public:
 	}
 
 	/// <summary>
-	/// Returns a tensor whose ith entry is 1 if data[i] > 0, and 0 otherwise.
 	/// </summary>
-	/// <returns></returns>
-	Tensor<T> reluDerivative() {
+	/// <returns>A tensor whose ith entry is 1 if data[i] > 0, and 0 otherwise.</returns>
+	[[nodiscard]]
+	Tensor<T> reluDerivative() const {
 		Tensor<T> ret(dims);
 		for (int i = 0; i < data.size(); i++) {
 			ret.data[i] = data[i] > static_cast<T>(0) ? static_cast<T>(1) : static_cast<T>(0);
@@ -614,6 +698,7 @@ private:
 	/// </summary>
 	/// <param name="indices"></param>
 	/// <returns>The flattened index</returns>
+	[[nodiscard]]
 	int getFlattenedIndex(const vector<int> &indices) const {
 		int flattenedIndex = 0;
 		for (int i = 0; i < indices.size(); i++) {
@@ -623,5 +708,12 @@ private:
 		}
 
 		return flattenedIndex;
+	}
+
+	void checkCuda(const cudaError_t &status) const {
+		if (status != cudaSuccess) {
+			cout << cudaGetErrorString(status) << "in " << __FILE__  << " at line " << __LINE__ << endl;
+			exit(-1);
+		}
 	}
 };

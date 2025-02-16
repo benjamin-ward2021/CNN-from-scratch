@@ -2,11 +2,12 @@
 #include <vector>
 #include <string>
 #include <chrono>
+#include <random>
 
-#include "Tensor.hpp"
-#include "MNISTLoader.hpp"
-#include "Layer.hpp"
-#include "FullyConnected.hpp"
+#include "Tensor.cuh"
+#include "MNISTLoader.cuh"
+#include "Layer.cuh"
+#include "FullyConnected.cuh"
 
 using std::vector, std::cout, std::endl, std::string;
 
@@ -21,9 +22,13 @@ void testTranspose();
 void testMatrixRowSum();
 void testMatrixColumnSum();
 void testFullyConnectedBackward();
+void testCuda();
+void testMatrixMultiplicationGPU();
+void compareCpuGpuMatrixMultiplication();
 
 int main() {
-	testFullyConnectedForward2();
+	// TODO: Add nodiscard / noexcept to certain functions
+	compareCpuGpuMatrixMultiplication();
 	//MNISTLoader trainData("MNIST Data\\train-images.idx3-ubyte", "MNIST Data\\train-labels.idx1-ubyte", 100); // TODO: Change to 60000
 	//trainData.printData(0, 10);
 	//testMatrixMultiplication();
@@ -337,4 +342,80 @@ void testFullyConnectedBackward() {
 	/* Getting number of milliseconds as a double. */
 	duration<double, std::milli> ms_double = time2 - time1;
 	std::cout << ms_double.count() << "ms\n";
+}
+
+void testCuda() {
+	// Initialize arrays A, B, and C.
+	//double A[3], B[3], C[3];
+
+	// Populate arrays A and B.
+	//A[0] = 5; A[1] = 8; A[2] = 3;
+	//B[0] = 7; B[1] = 6; B[2] = 4;
+
+	// Sum array elements across ( C[0] = A[0] + B[0] ) into array C using CUDA.
+	//TensorMathGPU::kernel(A, B, C, 3);
+
+	// Print out result.
+//	std::cout << "C = " << C[0] << ", " << C[1] << ", " << C[2] << std::endl;
+}
+
+void testMatrixMultiplicationGPU() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+	Tensor<double> t1({ 2,3 });
+	t1.set({ 0,0 }, 0);
+	t1.set({ 0,1 }, 1);
+	t1.set({ 0,2 }, 2.1);
+	t1.set({ 1,0 }, 1.5);
+	t1.set({ 1,1 }, 3);
+	t1.set({ 1,2 }, 5.25);
+
+	Tensor<double> t2({ 3,1 });
+	t2.set({ 0,0 }, 1.5);
+	t2.set({ 1,0 }, 3);
+	t2.set({ 2,0 }, 5.5);
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		Tensor<double> t3 = t1.matrixMultiplyGPU(t2);
+		//Tensor<double> t3 = t1.matrixMultiply<double>(t2);
+	}
+
+	auto time2 = high_resolution_clock::now();
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << ms_double.count() << "ms\n";
+}
+
+void compareCpuGpuMatrixMultiplication() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+	using std::uniform_real_distribution;
+	using std::default_random_engine;
+
+	uniform_real_distribution<double> dist(-1, 1);
+	default_random_engine engine(0);
+
+	Tensor<double> t1({ 32,5000 });
+	t1.setToRandom(dist, engine);
+	Tensor<double> t2({ 5000,5000 });
+	t2.setToRandom(dist, engine);
+
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		Tensor<double> t3 = t1.matrixMultiply<double>(t2);
+	}
+
+	auto time2 = high_resolution_clock::now();
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << "CPU: " << ms_double.count() << "ms\n";
+
+	auto time3 = high_resolution_clock::now();
+	for (int i = 0; i < 10; i++) {
+		Tensor<double> t3 = t1.matrixMultiplyGPU(t2);
+	}
+
+	auto time4 = high_resolution_clock::now();
+	duration<double, std::milli> ms_double2 = time4 - time3;
+	std::cout << "GPU: " << ms_double2.count() << "ms\n";
 }

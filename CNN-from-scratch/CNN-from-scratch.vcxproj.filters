@@ -56,4 +56,12 @@
       <Filter>MNIST Data</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="TensorMathGPU.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="TensorMathGPU.cuh">
+      <Filter>Header Files</Filter>
+    </CudaCompile>
+  </ItemGroup>
 </Project>

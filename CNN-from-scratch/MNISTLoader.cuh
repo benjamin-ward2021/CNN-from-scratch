@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "Tensor.hpp"
+#include "Tensor.cuh"
 
 using std::string, std::vector;
 
@@ -22,5 +22,6 @@ public:
 private:
 	void loadImages(string path, int maxAmount);
 	void loadLabels(string path, int maxAmount);
+	[[nodiscard]]
 	int convertBytesToInt(char *bytes);
 };
