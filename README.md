@@ -1,0 +1,1 @@
+This repo is my implementation of a convolutional neural network, created from scratch in CUDA C++. It is meant to serve as an educational resource, so the code is relatively well documented. Feel free to reach out if you have comments or suggestions. 
