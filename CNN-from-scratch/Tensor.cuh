@@ -11,7 +11,7 @@
 
 #include "TensorKernels.cuh"
 
-using std::vector, std::cout, std::endl, std::string, std::min, std::max, std::default_random_engine, std::normal_distribution, std::uniform_real_distribution;
+using std::vector, std::cout, std::endl, std::string, std::min, std::max, std::default_random_engine, std::normal_distribution, std::uniform_real_distribution, std::shuffle;
 
 /// <summary>
 /// A multidimensional array.
@@ -169,17 +169,58 @@ public:
 	}
 
 	/// <summary>
+	/// Provides a way to get batchSize random indices of samples. 
+	/// Used in combination with getBatch, so inputs and targets can share the same mapping.
+	/// </summary>
+	/// <param name="batchSize"></param>
+	/// <param name="randomEngine"></param>
+	/// <returns></returns>
+	[[nodiscard]]
+	vector<int> getRandomIndices(int batchSize, default_random_engine &randomEngine) const {
+		const int totalNumSamples = dims[0];
+		assert(batchSize <= totalNumSamples);
+		vector<int> indices(totalNumSamples);
+		for (int i = 0; i < totalNumSamples; i++) {
+			indices[i] = i;
+		}
+
+		shuffle(indices.begin(), indices.end(), randomEngine);
+
+		return vector<int>(indices.begin(), indices.begin() + batchSize);
+	}
+
+	/// <summary>
+	/// Gets a batch of samples based on their indices.
+	/// </summary>
+	/// <param name="indices"></param>
+	/// <returns>A tensor with dims = { batchSize,dims[1],dims[2],dims[3]... }</returns>
+	[[nodiscard]]
+	Tensor<T> getBatch(const vector<int> &indices) const {
+		const int batchSize = static_cast<int>(indices.size());
+		const int totalNumSamples = dims[0];
+		assert(batchSize <= totalNumSamples);
+		vector<int> batchDims = dims;
+		batchDims[0] = static_cast<int>(indices.size());
+		Tensor<T> batch(batchDims);
+		assert(coordinateConversionLookupTable == batch.coordinateConversionLookupTable);
+		for (int i = 0; i < batchSize; i++) {
+			for (int j = 0; j < coordinateConversionLookupTable[0]; j++) {
+				batch.data[i * coordinateConversionLookupTable[0] + j] = data[indices[i] * coordinateConversionLookupTable[0] + j];
+			}
+		}
+
+		return batch;
+	}
+
+	/// <summary>
 	/// Multiplies two matrices together. The algorithm uses tiling, which offers significant performance gains 
 	/// due to more efficient cache use. See https://marek.ai/matrix-multiplication-on-cpu.html for more information.
 	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
 	/// <param name="tileSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
 	/// <returns></returns>
-	template <typename U, typename V>
 	[[nodiscard]]
-	Tensor<U> matrixMultiply(const Tensor<V> &other, const int tileSize = 112) const {
+	Tensor<T> matrixMultiply(const Tensor<T> &other, const int tileSize = 112) const {
 		assert(dims.size() == 2 && other.dims.size() == 2);
 		assert(dims[1] == other.dims[0]);
 		// this = M * K, other = K * N, product = M * N
@@ -187,7 +228,7 @@ public:
 		int N = other.dims[1];
 		int K = dims[1];
 
-		Tensor<U> product({ M, N });
+		Tensor<T> product({ M, N });
 
 		for (int i = 0; i < M; i += tileSize) {
 			int i_max = min(i + tileSize, M);
@@ -301,6 +342,8 @@ public:
 
 		return transposed;
 	}
+
+	// TODO: Going to eventually need a transposeGPU
 
 	/// <summary>
 	/// Sums the rows of a matrix together.
@@ -710,6 +753,11 @@ private:
 		return flattenedIndex;
 	}
 
+	/// <summary>
+	/// Checks the CUDA error code, and exits if it wasn't successful.
+	/// Credit to https://github.com/tgautam03/CUDA-C/blob/master/05_tiled_mat_mul/tiled_mat_mul_gpu.cu
+	/// </summary>
+	/// <param name="status"></param>
 	void checkCuda(const cudaError_t &status) const {
 		if (status != cudaSuccess) {
 			cout << cudaGetErrorString(status) << "in " << __FILE__  << " at line " << __LINE__ << endl;

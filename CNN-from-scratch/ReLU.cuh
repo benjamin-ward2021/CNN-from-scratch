@@ -11,7 +11,7 @@
 template <typename T>
 class ReLU : public Layer<T> {
 public:
-	ReLU() : Layer<T>(Tensor<T>()) {}
+	ReLU() : input(Tensor<T>()) {}
 
 	/// <summary>
 	/// Performs forward propagation.
@@ -30,11 +30,9 @@ public:
 	/// <param name="gradWrtOutput">The gradient of loss with respect to the output of this layer. Dims = { batchSize,outputSize }.</param>
 	/// <returns>The gradient of loss with respect to the input of this layer. Dims = input.dims.</returns>
 	Tensor<T> backward(const Tensor<T> &gradWrtOutput) override {
-		// Note that we have to explicitly use the "this" keyword with input since it is a dependent name.
-		// See https://stackoverflow.com/questions/1527849/how-do-you-understand-dependent-names-in-c
-		assert(this->input != Tensor<T>());
+		assert(input != Tensor<T>());
 		// gradWrtInput(gradient of loss with respect to input) has dims = input.dims
-		Tensor<T> gradWrtInput = gradWrtOutput.elementwiseMultiply(this->input.reluDerivative());
+		Tensor<T> gradWrtInput = gradWrtOutput.elementwiseMultiply(input.reluDerivative());
 		return gradWrtInput;
 	}
 
@@ -47,9 +45,5 @@ public:
 	}
 
 private:
-	// 2d tensor with dims = { inputSize,outputSize }
-	Tensor<T> weights;
-
-	// 1d tensor with dims = { outputSize }
-	Tensor<T> biases;
+	Tensor<T> input;
 };

@@ -8,6 +8,7 @@
 #include "MNISTLoader.cuh"
 #include "Layer.cuh"
 #include "FullyConnected.cuh"
+#include "XORGenerator.cuh"
 
 using std::vector, std::cout, std::endl, std::string;
 
@@ -25,10 +26,11 @@ void testFullyConnectedBackward();
 void testCuda();
 void testMatrixMultiplicationGPU();
 void compareCpuGpuMatrixMultiplication();
+void testXORGenerator();
 
 int main() {
 	// TODO: Add nodiscard / noexcept to certain functions
-	compareCpuGpuMatrixMultiplication();
+	testXORGenerator();
 	//MNISTLoader trainData("MNIST Data\\train-images.idx3-ubyte", "MNIST Data\\train-labels.idx1-ubyte", 100); // TODO: Change to 60000
 	//trainData.printData(0, 10);
 	//testMatrixMultiplication();
@@ -64,12 +66,12 @@ void testMatrixMultiplication() {
 	t1.set({ 1,1 }, 3);
 	t1.set({ 1,2 }, 5.25);
 
-	Tensor<float> t2({ 3,1 });
+	Tensor<double> t2({ 3,1 });
 	t2.set({ 0,0 }, 1.5);
 	t2.set({ 1,0 }, 3);
 	t2.set({ 2,0 }, 5.5);
 
-	Tensor<double> t3 = t1.matrixMultiply<double>(t2);
+	Tensor<double> t3 = t1.matrixMultiply(t2);
 	// [14.55; 40.125] expected
 	assert(t3.get({ 0 }) == 14.55 && t3.get({ 1 }) == 40.125);
 }
@@ -91,7 +93,7 @@ void testMatrixMultiplication2() {
 	t2.set({ 2,0 }, 5.5);
 	auto time1 = high_resolution_clock::now();
 	for (int i = 0; i < 10; i++) {
-		Tensor<double> t3 = t1.matrixMultiply<double>(t2);
+		Tensor<double> t3 = t1.matrixMultiply(t2);
 		//Tensor<double> t3 = t1.matrixMultiply<double>(t2);
 	}
 
@@ -113,7 +115,7 @@ void testElementwiseAdd() {
 	t1.set({ 1,1 }, 3);
 	t1.set({ 1,2 }, 5.25);
 
-	Tensor<float> t2({ 2,3,10,10 });
+	Tensor<double> t2({ 2,3,10,10 });
 	t2.set({ 0,0 }, 1.5);
 	t2.set({ 0,1 }, 3.5);
 	t2.set({ 0,2 }, 4.0);
@@ -403,7 +405,7 @@ void compareCpuGpuMatrixMultiplication() {
 
 	auto time1 = high_resolution_clock::now();
 	for (int i = 0; i < 10; i++) {
-		Tensor<double> t3 = t1.matrixMultiply<double>(t2);
+		Tensor<double> t3 = t1.matrixMultiply(t2);
 	}
 
 	auto time2 = high_resolution_clock::now();
@@ -418,4 +420,15 @@ void compareCpuGpuMatrixMultiplication() {
 	auto time4 = high_resolution_clock::now();
 	duration<double, std::milli> ms_double2 = time4 - time3;
 	std::cout << "GPU: " << ms_double2.count() << "ms\n";
+}
+
+void testXORGenerator() {
+	using std::default_random_engine;
+	default_random_engine randomEngine(0);
+
+	XORGenerator<double> generator(0);
+	generator.generate(64);
+	vector<int> indices = generator.getInput().getRandomIndices(32, randomEngine);
+	Tensor<double> inputBatch = generator.getInput().getBatch(indices);
+	Tensor<double> outputBatch = generator.getOutput().getBatch(indices);
 }

@@ -161,6 +161,9 @@
   <ItemGroup>
     <CudaCompile Include="TensorKernels.cuh" />
   </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="XORGenerator.cuh" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.8.targets" />

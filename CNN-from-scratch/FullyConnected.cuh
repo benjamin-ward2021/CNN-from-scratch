@@ -15,14 +15,13 @@ using std::default_random_engine, std::normal_distribution, std::uniform_real_di
 template <typename T>
 class FullyConnected : public Layer<T> {
 public:
-	FullyConnected(int inputSize, int outputSize, T learningRate, int rngSeed = 0, WeightInitializationHeuristic weightInitializationHeuristic = WeightInitializationHeuristic::heNormal)
-		: weights(Tensor<T>({ inputSize,outputSize })), biases(Tensor<T>({ outputSize })), learningRate(learningRate), Layer<T>(Tensor<T>()) {
+	FullyConnected(int inputSize, int outputSize, T learningRate, bool useGPU = true, int rngSeed = 0, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
+		: weights(Tensor<T>({ inputSize,outputSize })), biases(Tensor<T>({ outputSize })), input(Tensor<T>()), learningRate(learningRate), useGPU(useGPU) {
 		default_random_engine randomEngine(rngSeed);
 
-		assert(weightInitializationHeuristic == WeightInitializationHeuristic::heNormal ||
-			weightInitializationHeuristic == WeightInitializationHeuristic::xavierUniform);
+		assert(weightInitializationHeuristic == heNormal || weightInitializationHeuristic == xavierUniform);
 
-		if (weightInitializationHeuristic == WeightInitializationHeuristic::heNormal) {
+		if (weightInitializationHeuristic == heNormal) {
 			normal_distribution<T> normalDistribution(static_cast<T>(0), static_cast<T>(sqrt(2.0 / inputSize)));
 			// Set weights according to normal he initialization
 			weights.setToRandom(normalDistribution, randomEngine);
@@ -31,7 +30,7 @@ public:
 			biases.setToZero();
 		}
 
-		else if (weightInitializationHeuristic == WeightInitializationHeuristic::xavierUniform) {
+		else if (weightInitializationHeuristic == xavierUniform) {
 			T bound = static_cast<T>(sqrt(6.0 / (inputSize + outputSize)));
 			uniform_real_distribution<T> uniformDistribution(-bound, bound);
 			// Set weights according to uniform xavier initialization
@@ -56,7 +55,7 @@ public:
 		// If Y = outputs, W = weights, X = inputs, B = biases...
 		// Y = X * W + B
 		// output dims will be = { batchSize,outputSize }
-		Tensor<T> output = input.template matrixMultiply<T>(weights);
+		Tensor<T> output = useGPU ? input.matrixMultiplyGPU(weights) : input.matrixMultiply(weights);
 		output.broadcastAddInPlace(biases);
 		return output;
 	}
@@ -67,17 +66,13 @@ public:
 	/// <param name="gradWrtOutput">The gradient of loss with respect to the output of this layer. Dims = { batchSize,outputSize }.</param>
 	/// <returns>The gradient of loss with respect to the input of this layer. Dims = { batchSize,inputSize }.</returns>
 	Tensor<T> backward(const Tensor<T> &gradWrtOutput) override {
-		// Note that we have to explicitly use the "this" keyword with input since it is a dependent name.
-		// We have to call matrixMultiply with the "template" keyword for the same reason.
-		// See https://stackoverflow.com/questions/1527849/how-do-you-understand-dependent-names-in-c
-		// and https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
-		assert(this->input != Tensor<T>());
+		assert(input != Tensor<T>());
 
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dW = dL/dY * dY/dW. Since Y = X * W + B, dY/dW = X. So dL/dW = transpose(X) * dL/dY.
 		// input has dims = { batchSize,inputSize }, so input.transpose() has dims = { inputSize,batchSize }
 		// gradWrtWeights (gradient of loss with respect to weights) has dims = { intputSize,outputSize }
-		Tensor<T> gradWrtWeights = this->input.transpose().template matrixMultiply<T>(gradWrtOutput);
+		Tensor<T> gradWrtWeights = useGPU ? input.transpose().matrixMultiplyGPU(gradWrtOutput) : input.transpose().matrixMultiply(gradWrtOutput);
 
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dB = dL/dY * dY/dB. Since Y = X * W + B, dY/dB = 1. So dL/dB = 1 * dL/dY.
@@ -87,12 +82,13 @@ public:
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dX = dL/dY * dY/dX. Since Y = X * W + B, dY/dX = W. So dL/dX = dL/dY * transpose(W).
 		// gradWrtInput (gradient of loss with respect to input) has dims = { batchSize,inputSize }
-		Tensor<T> gradWrtInput = gradWrtOutput.template matrixMultiply<T>(weights.transpose());
+		Tensor<T> gradWrtInput = useGPU ? gradWrtOutput.matrixMultiplyGPU(weights.transpose()) : gradWrtOutput.matrixMultiply(weights.transpose());
 
 		// Update weights and biases
 		weights.elementwiseSubtractInPlace(gradWrtWeights.scalarMultiply(learningRate));
 		biases.elementwiseSubtractInPlace(gradWrtBiases.scalarMultiply(learningRate));
 
+		// Return the gradient of loss with respect to input so that the previous layer can use it
 		return gradWrtInput;
 	}
 
@@ -111,5 +107,12 @@ private:
 	// 1d tensor with dims = { outputSize }
 	Tensor<T> biases;
 
+	// TODO: Should this be the flattened version? Probably all layers should be consistent in if they modify input before saving it.
+	Tensor<T> input;
+
+	// Multiplied with the gradients when updating weights and biases
 	T learningRate;
+
+	// Determines whether the GPU is used for calculations like matrix multiplications
+	bool useGPU;
 };
