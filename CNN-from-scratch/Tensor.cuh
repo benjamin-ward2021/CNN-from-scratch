@@ -314,8 +314,6 @@ public:
 		return product;
 	}
 
-	
-
 	/// <summary>
 	/// Transposes the matrix by changing the data, rather than changing the indexing.
 	/// Uses a tiling approach, which improves caching hit rate.
@@ -375,6 +373,65 @@ public:
 	Tensor<T> matrixColumnSum() const {
 		assert(dims.size() == 2);
 		return this->transpose().matrixRowSum();
+	}
+
+	/// <summary>
+	/// Sums over an axis in the tensor. 
+	/// </summary>
+	/// <param name="dim">The index of the dimension, starting at 0.</param>
+	/// <param name="keepDummyDim">Whether to keep the dimension as 1, or remove it entirely.</param>
+	/// <returns>New tensor with values summed along the dimension</returns>
+	[[nodiscard]]
+	Tensor<T> sum(int dim, bool keepDummyDim = false) const {
+		assert(dim < dims.size());
+
+		vector<int> sumDims = dims;
+		if (keepDummyDim) {
+			sumDims[dim] = 1;
+		}
+
+		else {
+			sumDims.erase(sumDims.begin() + dim);
+		}
+
+		Tensor<T> result(sumDims);
+
+		assert(dims[dim] > 0 && coordinateConversionLookupTable[dim] > 0);
+		// Number of blocks above target dimension
+		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then higherDimsSize = 3 * 7 = 21
+		int higherDimsSize = data.size() / (dims[dim] * coordinateConversionLookupTable[dim]);
+		assert(higherDimsSize > 0);
+
+		// Size of target dimension
+		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then currentDimsSize = 5
+		int currentDimsSize = dims[dim];
+
+		// Number of elements in dimensions after the target dimension
+		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then lowerDimsSize = 2 * 4 = 8
+		int lowerDimsSize = coordinateConversionLookupTable[dim];
+		assert(lowerDimsSize > 0);
+
+		for (int higherIndex = 0; higherIndex < higherDimsSize; higherIndex++) {
+			for (int lowerIndex = 0; lowerIndex < lowerDimsSize; lowerIndex++) {
+				T accumulator = static_cast<T>(0);
+				for (int currentIndex = 0; currentIndex < currentDimsSize; currentIndex++) {
+					int dataIndex = 
+						higherIndex * (currentDimsSize * lowerDimsSize) +
+						currentIndex * lowerDimsSize +
+						lowerIndex;
+
+					accumulator += data[dataIndex];
+				}
+
+				int resultDataIndex = 
+					higherIndex * lowerDimsSize +
+					lowerIndex;
+
+				result.data[resultDataIndex] = accumulator;
+			}
+		}
+
+		return result;
 	}
 
 	/// <summary>

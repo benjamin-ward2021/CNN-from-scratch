@@ -11,10 +11,11 @@
 template<typename T>
 class Layer {
 public:
-	// Note that layers are allowed to mutate the input during forward propagation.
-	virtual Tensor<T> forward(Tensor<T> &input) = 0;
-	// gradWrtOutput is the gradient of loss with respect to the output.
-	virtual Tensor<T> backward(const Tensor<T> &gradWrtOutput) = 0;
+	// Note that layers are allowed to mutate the inputs during forward propagation.
+	virtual Tensor<T> forward(Tensor<T> &inputs) = 0;
+	// gradWrtOutputs is the gradient of loss with respect to the outputs.
+	// Returns the gradient of loss with respect to the inputs.
+	virtual Tensor<T> backward(const Tensor<T> &gradWrtOutputs) = 0;
 	virtual void save() = 0;
 	virtual void load() = 0;
 };

@@ -11,31 +11,31 @@ class XORGenerator {
 public:
 	XORGenerator(int seed) : randomEngine(seed), uniformDistribution(static_cast<T>(-1), static_cast<T>(1)) {}
 	void generate(int totalNumSamples) {
-		input = Tensor<T>({ totalNumSamples,2 });
-		output = Tensor<T>({ totalNumSamples,1 });
+		inputs = Tensor<T>({ totalNumSamples,2 });
+		labels = Tensor<T>({ totalNumSamples,1 });
 		for (int i = 0; i < totalNumSamples; i++) {
 			T x1 = uniformDistribution(randomEngine);
 			T x2 = uniformDistribution(randomEngine);
-			input.set({ i,0 }, x1);
-			input.set({ i,1 }, x2);
+			inputs.set({ i,0 }, x1);
+			inputs.set({ i,1 }, x2);
 			bool isXor = (x1 >= 0 && x2 >= 0) || (x1 < 0 && x2 < 0);
-			output.set({ i }, isXor ? static_cast<T>(0) : static_cast<T>(1));
+			labels.set({ i }, isXor ? static_cast<T>(0) : static_cast<T>(1));
 		}
 	}
 
 	[[nodiscard]]
-	Tensor<T> getInput() const {
-		return input;
+	Tensor<T> getInputs() const {
+		return inputs;
 	}
 
 	[[nodiscard]]
-	Tensor<T> getOutput() const {
-		return output;
+	Tensor<T> getLabels() const {
+		return labels;
 	}
 private:
 	default_random_engine randomEngine;
 	uniform_real_distribution<T> uniformDistribution;
 
-	Tensor<T> input;
-	Tensor<T> output;
+	Tensor<T> inputs;
+	Tensor<T> labels;
 };

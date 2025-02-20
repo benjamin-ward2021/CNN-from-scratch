@@ -8,6 +8,8 @@
 #include "MNISTLoader.cuh"
 #include "Layer.cuh"
 #include "FullyConnected.cuh"
+#include "ReLU.cuh"
+#include "Softmax.cuh"
 #include "XORGenerator.cuh"
 
 using std::vector, std::cout, std::endl, std::string;
@@ -27,10 +29,13 @@ void testCuda();
 void testMatrixMultiplicationGPU();
 void compareCpuGpuMatrixMultiplication();
 void testXORGenerator();
+void testLayers();
+void testSum();
 
 int main() {
 	// TODO: Add nodiscard / noexcept to certain functions
-	testXORGenerator();
+	testSum();
+	testMatrixColumnSum();
 	//MNISTLoader trainData("MNIST Data\\train-images.idx3-ubyte", "MNIST Data\\train-labels.idx1-ubyte", 100); // TODO: Change to 60000
 	//trainData.printData(0, 10);
 	//testMatrixMultiplication();
@@ -275,7 +280,7 @@ void testMatrixRowSum() {
 	t2.set({ 2 }, 4.0);
 
 	auto time1 = high_resolution_clock::now();
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 1000; i++) {
 		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
 		//t1.elementwiseAdd<double>(t2);
 		//t1.elementwiseAddInPlace(t2);
@@ -306,7 +311,7 @@ void testMatrixColumnSum() {
 	t2.set({ 2 }, 4.0);
 
 	auto time1 = high_resolution_clock::now();
-	for (int i = 0; i < 10; i++) {
+	for (int i = 0; i < 1000; i++) {
 		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
 		//t1.elementwiseAdd<double>(t2);
 		//t1.elementwiseAddInPlace(t2);
@@ -428,7 +433,44 @@ void testXORGenerator() {
 
 	XORGenerator<double> generator(0);
 	generator.generate(64);
-	vector<int> indices = generator.getInput().getRandomIndices(32, randomEngine);
-	Tensor<double> inputBatch = generator.getInput().getBatch(indices);
-	Tensor<double> outputBatch = generator.getOutput().getBatch(indices);
+	vector<int> indices = generator.getInputs().getRandomIndices(32, randomEngine);
+	Tensor<double> inputBatch = generator.getInputs().getBatch(indices);
+	Tensor<double> outputBatch = generator.getLabels().getBatch(indices);
+}
+
+void testLayers() {
+	FullyConnected<double> fc(100,100,0.01);
+	ReLU<double> relu();
+	Softmax<double> softmax();
+}
+
+void testSum() {
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration;
+	Tensor<double> t1({ 32,5000 });
+	t1.set({ 0,0 }, 3.2);
+	t1.set({ 0,1 }, 1);
+	t1.set({ 0,2 }, 2.1);
+	t1.set({ 1,0 }, 1.5);
+	t1.set({ 1,1 }, 3);
+	t1.set({ 1,2 }, 5.25);
+
+	Tensor<float> t2({ 3 });
+	t2.set({ 0 }, 1.5);
+	t2.set({ 1 }, 3.5);
+	t2.set({ 2 }, 4.0);
+
+	auto time1 = high_resolution_clock::now();
+	for (int i = 0; i < 1000; i++) {
+		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAdd<double>(t2);
+		//t1.elementwiseAddInPlace(t2);
+		auto t4 = t1.sum(0);
+	}
+
+	auto time2 = high_resolution_clock::now();
+
+	/* Getting number of milliseconds as a double. */
+	duration<double, std::milli> ms_double = time2 - time1;
+	std::cout << ms_double.count() << "ms\n";
 }
