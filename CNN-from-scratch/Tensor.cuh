@@ -191,6 +191,7 @@ public:
 
 	/// <summary>
 	/// Broadcasts a tensor by repeating dimensions.
+	/// For visualizations I recommend https://medium.com/@hunter-j-phillips/a-simple-introduction-to-broadcasting-db8e581368b3
 	/// </summary>
 	/// <param name="broadcastedDims"></param>
 	/// <returns>The expanded tensor.</returns>
