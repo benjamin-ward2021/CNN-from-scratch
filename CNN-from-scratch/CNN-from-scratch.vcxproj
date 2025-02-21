@@ -165,7 +165,7 @@
     <CudaCompile Include="XORGenerator.cuh" />
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="Softmax.cuh" />
+    <CudaCompile Include="SoftmaxCrossEntropy.cuh" />
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="Network.cuh" />

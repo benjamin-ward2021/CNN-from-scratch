@@ -65,7 +65,7 @@ public:
 		// Y = X * W + B
 		Tensor<T> outputs = useGPU ? inputs.matrixMultiplyGPU(weights) : inputs.matrixMultiply(weights);
 		assert((outputs.getDims() == vector<int>{ batchSize,outputSize }));
-		outputs.broadcastAddInPlace(biases);
+		outputs.elementwiseAddInPlace(biases.broadcast(outputs.getDims()));
 		return outputs;
 	}
 
@@ -92,7 +92,7 @@ public:
 
 		// dL/dX = dL/dY * dY/dX. Since Y = X * W + B, dY/dX = W. So dL/dX = dL/dY * transpose(W).
 		Tensor<T> gradWrtInputs = useGPU ? gradWrtOutputs.matrixMultiplyGPU(weights.transpose()) : gradWrtOutputs.matrixMultiply(weights.transpose());
-		assert((gradWrtWeights.getDims() == vector<int>{ batchSize,inputSize }));
+		assert((gradWrtInputs.getDims() == vector<int>{ batchSize,inputSize }));
 
 		// Update weights and biases
 		weights.elementwiseSubtractInPlace(gradWrtWeights.scalarMultiply(learningRate));

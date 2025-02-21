@@ -9,16 +9,15 @@
 #include "Layer.cuh"
 #include "FullyConnected.cuh"
 #include "ReLU.cuh"
-#include "Softmax.cuh"
+#include "SoftmaxCrossEntropy.cuh"
 #include "XORGenerator.cuh"
+#include "Network.cuh"
 
-using std::vector, std::cout, std::endl, std::string;
+using std::vector, std::cout, std::endl, std::string, std::unique_ptr;
 
 void measureTensorSpeed();
 void testMatrixMultiplication();
 void testMatrixMultiplication2();
-void testElementwiseAdd();
-void testBroadcastAdd();
 void testFullyConnectedForward();
 void testFullyConnectedForward2();
 void testTranspose();
@@ -31,11 +30,11 @@ void compareCpuGpuMatrixMultiplication();
 void testXORGenerator();
 void testLayers();
 void testSum();
+void testNetwork();
 
 int main() {
 	// TODO: Add nodiscard / noexcept to certain functions
-	testSum();
-	testMatrixColumnSum();
+	testNetwork();
 	//MNISTLoader trainData("MNIST Data\\train-images.idx3-ubyte", "MNIST Data\\train-labels.idx1-ubyte", 100); // TODO: Change to 60000
 	//trainData.printData(0, 10);
 	//testMatrixMultiplication();
@@ -107,73 +106,6 @@ void testMatrixMultiplication2() {
 	/* Getting number of milliseconds as a double. */
 	duration<double, std::milli> ms_double = time2 - time1;
 	std::cout << ms_double.count() << "ms\n";
-}
-
-void testElementwiseAdd() {
-	using std::chrono::high_resolution_clock;
-	using std::chrono::duration;
-	Tensor<double> t1({ 2,3,10,10 });
-	t1.set({ 0,0 }, 3.2);
-	t1.set({ 0,1 }, 1);
-	t1.set({ 0,2 }, 2.1);
-	t1.set({ 1,0 }, 1.5);
-	t1.set({ 1,1 }, 3);
-	t1.set({ 1,2 }, 5.25);
-
-	Tensor<double> t2({ 2,3,10,10 });
-	t2.set({ 0,0 }, 1.5);
-	t2.set({ 0,1 }, 3.5);
-	t2.set({ 0,2 }, 4.0);
-	t2.set({ 1,0 }, 4.5);
-	t2.set({ 1,1 }, 10.5);
-	t2.set({ 1,2 }, 15.1);
-
-	auto time1 = high_resolution_clock::now();
-	for (int i = 0; i < 100000; i++) {
-		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
-		//t1.elementwiseAdd<double>(t2);
-		//t1.elementwiseAddInPlace(t2);
-		t1.elementwiseMultiplyInPlace(t2);
-	}
-
-	auto time2 = high_resolution_clock::now();
-
-	/* Getting number of milliseconds as a double. */
-	duration<double, std::milli> ms_double = time2 - time1;
-	std::cout << ms_double.count() << "ms\n";
-	//assert(t3.get({ 0 }) == 14.55 && t3.get({ 1 }) == 40.125);
-}
-
-void testBroadcastAdd() {
-	using std::chrono::high_resolution_clock;
-	using std::chrono::duration;
-	Tensor<double> t1({ 2,3 });
-	t1.set({ 0,0 }, 3.2);
-	t1.set({ 0,1 }, 1);
-	t1.set({ 0,2 }, 2.1);
-	t1.set({ 1,0 }, 1.5);
-	t1.set({ 1,1 }, 3);
-	t1.set({ 1,2 }, 5.25);
-
-	Tensor<float> t2({ 3 });
-	t2.set({ 0 }, 1.5);
-	t2.set({ 1 }, 3.5);
-	t2.set({ 2 }, 4.0);
-
-	auto time1 = high_resolution_clock::now();
-	for (int i = 0; i < 100000; i++) {
-		//Tensor<double> t3 = t1.elementwiseAdd<double>(t2);
-		//t1.elementwiseAdd<double>(t2);
-		//t1.elementwiseAddInPlace(t2);
-		t1.broadcastAddInPlace(t2);
-	}
-
-	auto time2 = high_resolution_clock::now();
-
-	/* Getting number of milliseconds as a double. */
-	duration<double, std::milli> ms_double = time2 - time1;
-	std::cout << ms_double.count() << "ms\n";
-	//assert(t3.get({ 0 }) == 14.55 && t3.get({ 1 }) == 40.125);
 }
 
 // TODO: Actually make a test case that asserts if the output is correct
@@ -427,21 +359,21 @@ void compareCpuGpuMatrixMultiplication() {
 	std::cout << "GPU: " << ms_double2.count() << "ms\n";
 }
 
-void testXORGenerator() {
-	using std::default_random_engine;
-	default_random_engine randomEngine(0);
-
-	XORGenerator<double> generator(0);
-	generator.generate(64);
-	vector<int> indices = generator.getInputs().getRandomIndices(32, randomEngine);
-	Tensor<double> inputBatch = generator.getInputs().getBatch(indices);
-	Tensor<double> outputBatch = generator.getLabels().getBatch(indices);
-}
+//void testXORGenerator() {
+//	using std::default_random_engine;
+//	default_random_engine randomEngine(0);
+//
+//	XORGenerator<double> generator(0);
+//	generator.generate(64);
+//	vector<int> indices = generator.getInputs().getRandomIndices(32, randomEngine);
+//	Tensor<double> inputBatch = generator.getInputs().getBatch(indices);
+//	Tensor<double> outputBatch = generator.getLabels().getBatch(indices);
+//}
 
 void testLayers() {
 	FullyConnected<double> fc(100,100,0.01);
-	ReLU<double> relu();
-	Softmax<double> softmax();
+	ReLU<double> relu;
+	SoftmaxCrossEntropy<double> softmax;
 }
 
 void testSum() {
@@ -473,4 +405,30 @@ void testSum() {
 	/* Getting number of milliseconds as a double. */
 	duration<double, std::milli> ms_double = time2 - time1;
 	std::cout << ms_double.count() << "ms\n";
+}
+
+void testNetwork() {
+	XORGenerator<double> generator(0);
+	generator.generate(1024);
+
+	default_random_engine randomEngine(0);
+
+	vector<unique_ptr<Layer<double>>> layers;
+	layers.push_back(std::make_unique<FullyConnected<double>>(2, 11, 0.01));
+	layers.push_back(std::make_unique<ReLU<double>>());
+	layers.push_back(std::make_unique<FullyConnected<double>>(11, 2, 0.01));
+	layers.push_back(std::make_unique<SoftmaxCrossEntropy<double>>());
+
+	Network network(std::move(layers));
+	for (int i = 0; i < 10000; i++) {
+		vector<int> indices = generator.getInputs().getRandomIndices(64, randomEngine);
+		Tensor<double> inputs = generator.getInputs().getBatch(indices);
+		Tensor<int> labels = generator.getLabels().getBatch(indices);
+
+		Tensor<double> predicted = network.forward(inputs);
+		if (i % 500 == 0) {
+			cout << "Loss " << i << ": " << network.loss(predicted, labels) << endl;
+		}
+		network.backward(labels);
+	}
 }

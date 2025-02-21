@@ -11,7 +11,7 @@
 
 #include "TensorKernels.cuh"
 
-using std::vector, std::cout, std::endl, std::string, std::min, std::max, std::default_random_engine, std::normal_distribution, std::uniform_real_distribution, std::shuffle;
+using std::vector, std::cout, std::endl, std::string, std::default_random_engine, std::normal_distribution, std::uniform_real_distribution;
 
 /// <summary>
 /// A multidimensional array.
@@ -37,7 +37,10 @@ public:
 	/// <param name="dims"></param>
 	Tensor(const vector<int> &dims) : dims(dims) {
 		assert(dims.size() > 0);
-		int size = createCoordinateConversionLookupTable(dims);
+		coordinateConversionLookupTable = createCoordinateConversionLookupTable(dims);
+		assert(coordinateConversionLookupTable.size() > 0);
+		int size = getSizeFromDims(dims);
+		assert(size > 0);
 		data = vector<T>(size);
 	}
 
@@ -47,7 +50,8 @@ public:
 	/// <param name="dims"></param>
 	Tensor(const vector<T> &data, const vector<int> &dims) : data(data), dims(dims) {
 		assert(dims.size() > 0);
-		int size = createCoordinateConversionLookupTable(dims);
+		coordinateConversionLookupTable = createCoordinateConversionLookupTable(dims);
+		int size = getSizeFromDims(dims);
 
 		// Verify that the data passed in matches the expected size
 		assert(data.size() == size);
@@ -59,6 +63,22 @@ public:
 
 	bool operator!=(const Tensor<T> &other) const {
 		return !(*this == other);
+	}
+
+	/// <summary>
+	/// Creates a new tensor that conains a statically casted version of the data.
+	/// </summary>
+	/// <typeparam name="U"></typeparam>
+	/// <returns></returns>
+	template <typename U>
+	[[nodiscard]]
+	Tensor<U> convert() const {
+		Tensor<U> converted(dims);
+		for (int i = 0; i < data.size(); i++) {
+			converted.data[i] = static_cast<U>(data[i]);
+		}
+
+		return converted;
 	}
 
 	// TODO: Should there also be a constructor for moving data instead of copying it?
@@ -133,7 +153,8 @@ public:
 	/// </summary>
 	/// <param name="dims"></param>
 	void reinterpretDims(const vector<int> &dims) {
-		int size = createCoordinateConversionLookupTable(dims);
+		coordinateConversionLookupTable = createCoordinateConversionLookupTable(dims);
+		int size = getSizeFromDims(dims);
 		assert(size == data.size());
 		this->dims = dims;
 	}
@@ -169,6 +190,47 @@ public:
 	}
 
 	/// <summary>
+	/// Broadcasts a tensor by repeating dimensions.
+	/// </summary>
+	/// <param name="broadcastedDims"></param>
+	/// <returns>The expanded tensor.</returns>
+	[[nodiscard]]
+	Tensor<T> broadcast(const vector<int> &broadcastedDims) const {
+		assert(dims.size() > 0 && broadcastedDims.size() > 0);
+		assert(broadcastedDims.size() >= dims.size());
+
+		vector<int> paddedDims = dims;
+		// Add dummy dimensions
+		while (paddedDims.size() < broadcastedDims.size()) {
+			paddedDims.insert(paddedDims.begin(), 1);
+		}
+
+		assert(paddedDims.size() == broadcastedDims.size());
+
+		for (int i = 0; i < broadcastedDims.size(); i++) {
+			assert(paddedDims[i] == 1 || paddedDims[i] == broadcastedDims[i]);
+		}
+
+		vector<int> paddedLookupTable = createCoordinateConversionLookupTable(paddedDims);
+		vector<int> broadcastedLookupTable = createCoordinateConversionLookupTable(broadcastedDims);
+
+		Tensor<T> broadcasted(broadcastedDims);
+
+		for (int i = 0; i < broadcasted.data.size(); i++) {
+			int dataIndex = 0;
+			for (int dim = 0; dim < broadcastedDims.size(); dim++) {
+				int coordinate = paddedDims[dim] == 1 ? 0 : (i / broadcastedLookupTable[dim]) % paddedDims[dim];
+				dataIndex += coordinate * paddedLookupTable[dim];
+			}
+
+			assert(dataIndex < data.size());
+			broadcasted.data[i] = data[dataIndex];
+		}
+
+		return broadcasted;
+	}
+
+	/// <summary>
 	/// Provides a way to get batchSize random indices of samples. 
 	/// Used in combination with getBatch, so inputs and targets can share the same mapping.
 	/// </summary>
@@ -184,7 +246,7 @@ public:
 			indices[i] = i;
 		}
 
-		shuffle(indices.begin(), indices.end(), randomEngine);
+		std::shuffle(indices.begin(), indices.end(), randomEngine);
 
 		return vector<int>(indices.begin(), indices.begin() + batchSize);
 	}
@@ -231,11 +293,11 @@ public:
 		Tensor<T> product({ M, N });
 
 		for (int i = 0; i < M; i += tileSize) {
-			int i_max = min(i + tileSize, M);
+			int i_max = std::min(i + tileSize, M);
 			for (int j = 0; j < N; j += tileSize) {
-				int j_max = min(j + tileSize, N);
+				int j_max = std::min(j + tileSize, N);
 				for (int k = 0; k < K; k += tileSize) {
-					int k_max = min(k + tileSize, K);
+					int k_max = std::min(k + tileSize, K);
 					for (int ii = i; ii < i_max; ii++) {
 						for (int kk = k; kk < k_max; kk++) {
 							T a_val = data[ii * K + kk];
@@ -327,9 +389,9 @@ public:
 		int cols = dims[1];
 		Tensor<T> transposed({ cols,rows });
 		for (int i = 0; i < rows; i += tileSize) {
-			int i_max = min(i + tileSize, rows);
+			int i_max = std::min(i + tileSize, rows);
 			for (int j = 0; j < cols; j += tileSize) {
-				int j_max = min(j + tileSize, cols);
+				int j_max = std::min(j + tileSize, cols);
 				for (int ii = i; ii < i_max; ii++) {
 					for (int jj = j; jj < j_max; jj++) {
 						transposed.data[jj * rows + ii] = data[ii * cols + jj];
@@ -375,6 +437,9 @@ public:
 		return this->transpose().matrixRowSum();
 	}
 
+	// TODO: Both sum and max share most of their code. Maybe there can be a private method "reduce" that takes a function pointer
+	// for whatever operation needs to be performed.
+
 	/// <summary>
 	/// Sums over an axis in the tensor. 
 	/// </summary>
@@ -399,12 +464,13 @@ public:
 		assert(dims[dim] > 0 && coordinateConversionLookupTable[dim] > 0);
 		// Number of blocks above target dimension
 		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then higherDimsSize = 3 * 7 = 21
-		int higherDimsSize = data.size() / (dims[dim] * coordinateConversionLookupTable[dim]);
+		int higherDimsSize = static_cast<int>(data.size() / (dims[dim] * coordinateConversionLookupTable[dim]));
 		assert(higherDimsSize > 0);
 
 		// Size of target dimension
 		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then currentDimsSize = 5
 		int currentDimsSize = dims[dim];
+		assert(currentDimsSize > 0);
 
 		// Number of elements in dimensions after the target dimension
 		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then lowerDimsSize = 2 * 4 = 8
@@ -413,20 +479,15 @@ public:
 
 		for (int higherIndex = 0; higherIndex < higherDimsSize; higherIndex++) {
 			for (int lowerIndex = 0; lowerIndex < lowerDimsSize; lowerIndex++) {
+				int baseIndex = higherIndex * (currentDimsSize * lowerDimsSize) + lowerIndex;
 				T accumulator = static_cast<T>(0);
 				for (int currentIndex = 0; currentIndex < currentDimsSize; currentIndex++) {
-					int dataIndex = 
-						higherIndex * (currentDimsSize * lowerDimsSize) +
-						currentIndex * lowerDimsSize +
-						lowerIndex;
+					int dataIndex = baseIndex + currentIndex * lowerDimsSize;
 
 					accumulator += data[dataIndex];
 				}
 
-				int resultDataIndex = 
-					higherIndex * lowerDimsSize +
-					lowerIndex;
-
+				int resultDataIndex = higherIndex * lowerDimsSize + lowerIndex;
 				result.data[resultDataIndex] = accumulator;
 			}
 		}
@@ -435,33 +496,128 @@ public:
 	}
 
 	/// <summary>
-	/// Adds two tensors of the same shape together. Must specify return type as first template type.
+	/// Overloads the sum method. Sums the entire tensor.
 	/// </summary>
-	/// <typeparam name="U">Return type</typeparam>
-	/// <typeparam name="V"></typeparam>
+	/// <returns></returns>
+	[[nodiscard]]
+	T sum() {
+		T accumulator = static_cast<T>(0);
+		for (int i = 0; i < data.size(); i++) {
+			accumulator += data[i];
+		}
+
+		return accumulator;
+	}
+
+	/// <summary>
+	/// Maxes over an axis in the tensor. 
+	/// </summary>
+	/// <param name="dim">The index of the dimension, starting at 0.</param>
+	/// <param name="keepDummyDim">Whether to keep the dimension as 1, or remove it entirely.</param>
+	/// <returns>New tensor with max values along the dimension</returns>
+	[[nodiscard]]
+	Tensor<T> max(int dim, bool keepDummyDim = false) const {
+		assert(dim < dims.size());
+
+		vector<int> maxDims = dims;
+		if (keepDummyDim) {
+			maxDims[dim] = 1;
+		}
+
+		else {
+			maxDims.erase(maxDims.begin() + dim);
+		}
+
+		Tensor<T> result(maxDims);
+
+		assert(dims[dim] > 0 && coordinateConversionLookupTable[dim] > 0);
+		// Number of blocks above target dimension
+		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then higherDimsSize = 3 * 7 = 21
+		int higherDimsSize = static_cast<int>(data.size() / (dims[dim] * coordinateConversionLookupTable[dim]));
+		assert(higherDimsSize > 0);
+
+		// Size of target dimension
+		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then currentDimsSize = 5
+		int currentDimsSize = dims[dim];
+		assert(currentDimsSize > 0);
+
+		// Number of elements in dimensions after the target dimension
+		// (Ex. if dims = { 3,7,5,2,4 } and dim = 2, then lowerDimsSize = 2 * 4 = 8
+		int lowerDimsSize = coordinateConversionLookupTable[dim];
+		assert(lowerDimsSize > 0);
+
+		for (int higherIndex = 0; higherIndex < higherDimsSize; higherIndex++) {
+			for (int lowerIndex = 0; lowerIndex < lowerDimsSize; lowerIndex++) {
+				int baseIndex = higherIndex * (currentDimsSize * lowerDimsSize) + lowerIndex;
+				T currentMax = data[baseIndex];
+				for (int currentIndex = 0; currentIndex < currentDimsSize; currentIndex++) {
+					int dataIndex = baseIndex + currentIndex * lowerDimsSize;
+
+					currentMax = std::max(currentMax, data[dataIndex]);
+				}
+
+				int resultDataIndex = higherIndex * lowerDimsSize + lowerIndex;
+				result.data[resultDataIndex] = currentMax;
+			}
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Calculates the exp for each element.
+	/// </summary>
+	/// <returns></returns>
+	[[nodiscard]]
+	Tensor<T> exp() const {
+		Tensor<T> result(dims);
+		for (int i = 0; i < data.size(); i++) {
+			result.data[i] = std::exp(data[i]);
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Calculates the log for each element.
+	/// </summary>
+	/// <param name="epsilon">A very small number that is added to avoid taking the log of 0.</param>
+	/// <returns></returns>
+	[[nodiscard]]
+	Tensor<T> log(double epsilon = 1e-8) const {
+		Tensor<T> result(dims);
+		for (int i = 0; i < data.size(); i++) {
+			T dataPlusEpsilon = data[i] + static_cast<T>(epsilon);
+			assert(dataPlusEpsilon > 0);
+			result.data[i] = std::log(dataPlusEpsilon);
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// Adds two tensors of the same shape together.
+	/// </summary>
 	/// <param name="other"></param>
 	/// <returns>The tensor of sums.</returns>
-	template <typename U, typename V>
 	[[nodiscard]]
-	Tensor<U> elementwiseAdd(const Tensor<V> &other) const {
+	Tensor<T> elementwiseAdd(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<U> sum(data.size());
+		vector<T> sum(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
-			sum[i] = static_cast<U>(data[i] + other.data[i]);
+			sum[i] = static_cast<T>(data[i] + other.data[i]);
 		}
 	
-		return Tensor<U>(sum, dims);
+		return Tensor<T>(sum, dims);
 	}
 
 	/// <summary>
 	/// Adds two tensors of the same shape, in place.
 	/// (I.e. data += other.data).
 	/// </summary>
-	/// <typeparam name="U"></typeparam>
 	/// <param name="other"></param>
-	template <typename U>
-	void elementwiseAddInPlace(const Tensor<U> &other) {
+	void elementwiseAddInPlace(const Tensor<T> &other) {
 		assert(dims == other.dims);
 		for (int i = 0; i < data.size(); i++) {
 			data[i] += other.data[i];
@@ -469,80 +625,28 @@ public:
 	}
 
 	/// <summary>
-	/// Adds two tensors together, where if other has fewer dimensions than this, it gets broadcasted up.
-	/// Must specify return type as first template type.
-	/// Note that this doesn't actually check that the dimensions are compatible; it only asserts that the data sizes are compatible.
+	/// Subtracts two tensors of the same shape.
 	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <typeparam name="V"></typeparam>
-	/// <param name="other"></param>
-	/// <returns>The tensor of sums.</returns>
-	template <typename U, typename V>
-	[[nodiscard]]
-	Tensor<U> broadcastAdd(const Tensor<V> &other) const {
-		assert(dims >= other.dims && data.size() >= other.data.size() && data.size() % other.data.size() == 0);
-		vector<U> sum(data.size());
-		int broadcastFactor = data.size() / other.data.size();
-		for (int i = 0; i < broadcastFactor; i++) {
-			for (int j = 0; j < other.data.size(); j++) {
-				int dataIndex = i * other.data.size() + j;
-				sum[dataIndex] = static_cast<U>(data[dataIndex] + other.data[j]);
-			}
-		}
-
-		return Tensor<U>(sum, dims);
-	}
-
-	/// <summary>
-	/// Adds two tensors together in place, where if other has fewer dimensions than this, it gets broadcasted up.
-	/// See https://www.geeksforgeeks.org/tensor-broadcasting/
-	/// Note that this doesn't actually check that the dimensions are compatible; it only asserts that the data sizes are compatible.
-	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <param name="other"></param>
-	/// <returns>The tensor of sums.</returns>
-	template <typename U>
-	void broadcastAddInPlace(const Tensor<U> &other) {
-		assert(dims.size() >= other.dims.size() && data.size() >= other.data.size() && data.size() % other.data.size() == 0);
-		int broadcastFactor = static_cast<int>(data.size() / other.data.size());
-		for (int i = 0; i < broadcastFactor; i++) {
-			for (int j = 0; j < other.data.size(); j++) {
-				int dataIndex = static_cast<int>(i * other.data.size() + j);
-				data[dataIndex] += other.data[j];
-			}
-		}
-	}
-
-	/// <summary>
-	/// Subtracts two tensors of the same shape. Must specify return type as first template type.
-	/// </summary>
-	/// <typeparam name="U">Return type</typeparam>
-	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
 	/// <returns>The tensor of differences.</returns>
-	template <typename U, typename V>
 	[[nodiscard]]
-	Tensor<U> elementwiseSubtract(const Tensor<V> &other) const {
+	Tensor<T> elementwiseSubtract(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<U> difference(data.size());
+		vector<T> difference(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
-			difference[i] = static_cast<U>(data[i] - other.data[i]);
+			difference[i] = static_cast<T>(data[i] - other.data[i]);
 		}
 
-		return Tensor<U>(difference, dims);
+		return Tensor<T>(difference, dims);
 	}
 
 	/// <summary>
 	/// Subtracts two tensors of the same shape, in place.
 	/// (I.e. data -= other.data).
-	/// To store the result in other, see elementwiseSubtractInReversePlace.
-	/// (I.e. other.data = data - other.data).
 	/// </summary>
-	/// <typeparam name="U"></typeparam>
 	/// <param name="other"></param>
-	template <typename U>
-	void elementwiseSubtractInPlace(const Tensor<U> &other) {
+	void elementwiseSubtractInPlace(const Tensor<T> &other) {
 		assert(dims == other.dims);
 		for (int i = 0; i < data.size(); i++) {
 			data[i] -= other.data[i];
@@ -550,73 +654,20 @@ public:
 	}
 
 	/// <summary>
-	/// Subtracts two tensors in place, where if other has fewer dimensions than this, it gets broadcasted up.
-	/// See https://www.geeksforgeeks.org/tensor-broadcasting/
-	/// Note that this doesn't actually check that the dimensions are compatible; it only asserts that the data sizes are compatible.
+	/// Multiplies two tensors of the same shape, in an elementwise way (NOT matrix multiplication).
 	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <param name="other"></param>
-	/// <returns>The tensor of differences.</returns>
-	template <typename U>
-	void broadcastSubtractInPlace(const Tensor<U> &other) {
-		assert(dims.size() >= other.dims.size() && data.size() >= other.data.size() && data.size() % other.data.size() == 0);
-		int broadcastFactor = static_cast<int>(data.size() / other.data.size());
-		for (int i = 0; i < broadcastFactor; i++) {
-			for (int j = 0; j < other.data.size(); j++) {
-				int dataIndex = static_cast<int>(i * other.data.size() + j);
-				data[dataIndex] -= other.data[j];
-			}
-		}
-	}
-
-	/// <summary>
-	/// Subtracts two tensors of the same shape, in place, storing the result in other.
-	/// (I.e. other.data = data - other.data).
-	/// To store the result in this tensor, see elementwiseSubtractInPlace.
-	/// (I.e. data -= other.data).
-	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <param name="other"></param>
-	template <typename U>
-	void elementwiseSubtractInReversePlace(Tensor<U> &other) const {
-		assert(dims == other.dims);
-		for (int i = 0; i < data.size(); i++) {
-			other.data[i] = data[i] - other.data[i];
-		}
-	}
-
-	/// <summary>
-	/// Multiplies two tensors of the same shape, in an elementwise way (NOT matrix multiplication). Must specify return type as first template type.
-	/// </summary>
-	/// <typeparam name="U">Return type</typeparam>
-	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
 	/// <returns>The tensor of products.</returns>
-	template <typename U, typename V>
 	[[nodiscard]]
-	Tensor<U> elementwiseMultiply(const Tensor<V> &other) const {
+	Tensor<T> elementwiseMultiply(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<U> product(data.size());
+		vector<T> product(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
-			product[i] = static_cast<U>(data[i] * other.data[i]);
+			product[i] = static_cast<T>(data[i] * other.data[i]);
 		}
 
-		return Tensor<U>(product, dims);
-	}
-
-	/// <summary>
-	/// Multiplies two tensors of the same shape, in place.
-	/// (I.e. data *= other.data).
-	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <param name="other"></param>
-	template <typename U>
-	void elementwiseMultiplyInPlace(const Tensor<U> &other) {
-		assert(dims == other.dims);
-		for (int i = 0; i < data.size(); i++) {
-			data[i] *= other.data[i];
-		}
+		return Tensor<T>(product, dims);
 	}
 
 	/// <summary>
@@ -626,64 +677,44 @@ public:
 	/// <returns>The tensor of products.</returns>
 	[[nodiscard]]
 	Tensor<T> scalarMultiply(T multiplier) {
-		Tensor<T> product(dims);
+		Tensor<T> products(dims);
 		for (int i = 0; i < data.size(); i++) {
-			product.data[i] = data[i] * multiplier;
+			products.data[i] = data[i] * multiplier;
 		}
 
-		return product;
+		return products;
 	}
 
 	/// <summary>
-	/// Divides two tensors of the same shape, in an elementwise way. Must specify return type as first template type.
+	/// Divides two tensors of the same shape, in an elementwise way.
 	/// </summary>
-	/// <typeparam name="U">Return type</typeparam>
-	/// <typeparam name="V"></typeparam>
 	/// <param name="other"></param>
 	/// <returns>The tensor of quotients.</returns>
-	template <typename U, typename V>
 	[[nodiscard]]
-	Tensor<U> elementwiseDivide(const Tensor<V> &other) const {
+	Tensor<T> elementwiseDivide(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<U> quotient(data.size());
+		vector<T> quotient(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
-			quotient[i] = static_cast<U>(data[i] / other.data[i]);
+			quotient[i] = static_cast<T>(data[i] / other.data[i]);
 		}
 
-		return Tensor<U>(quotient, dims);
+		return Tensor<T>(quotient, dims);
 	}
 
 	/// <summary>
-	/// Divides two tensors of the same shape, in place.
-	/// (I.e. data /= other.data).
-	/// To store the result in other, see elementwiseDivideInReversePlace.
-	/// (I.e. other.data = data / other.data).
+	/// Divides a tensor with a scalar.
 	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <param name="other"></param>
-	template <typename U>
-	void elementwiseDivideInPlace(const Tensor<U> &other) {
-		assert(dims == other.dims);
+	/// <param name="divisor"></param>
+	/// <returns>The tensor of quotients.</returns>
+	[[nodiscard]]
+	Tensor<T> scalarDivide(T divisor) {
+		Tensor<T> quotients(dims);
 		for (int i = 0; i < data.size(); i++) {
-			data[i] /= other.data[i];
+			quotients.data[i] = data[i] / divisor;
 		}
-	}
 
-	/// <summary>
-	/// Divides two tensors of the same shape, in place, storing the result in other.
-	/// (I.e. other.data = data / other.data).
-	/// To store the result in this tensor, see elementwiseDivideInPlace.
-	/// (I.e. data /= other.data).
-	/// </summary>
-	/// <typeparam name="U"></typeparam>
-	/// <param name="other"></param>
-	template <typename U>
-	void elementwiseDivideInReversePlace(Tensor<U> &other) const {
-		assert(dims == other.dims);
-		for (int i = 0; i < data.size(); i++) {
-			other.data[i] = data[i] / other.data[i];
-		}
+		return quotients;
 	}
 	
 	/// <summary>
@@ -693,8 +724,10 @@ public:
 	Tensor<T> relu() const {
 		Tensor<T> ret(dims);
 		for (int i = 0; i < data.size(); i++) {
-			ret.data[i] = max(static_cast<T>(0), data[i]);
+			ret.data[i] = std::max(static_cast<T>(0), data[i]);
 		}
+
+		return ret;
 	}
 
 	/// <summary>
@@ -706,6 +739,25 @@ public:
 		for (int i = 0; i < data.size(); i++) {
 			ret.data[i] = data[i] > static_cast<T>(0) ? static_cast<T>(1) : static_cast<T>(0);
 		}
+
+		return ret;
+	}
+
+	/// <summary>
+	/// Performs a softmax calculation over a dimension, where the outputs are the corresponding probability distribution.
+	/// </summary>
+	/// <param name="dim"></param>
+	/// <returns></returns>
+	[[nodiscard]]
+	Tensor<T> softmax(int dim) const {
+		// Subtract the maxes to have better stability
+		Tensor<T> maxes = max(dim, true);
+		Tensor<T> maxSubtracted = elementwiseSubtract(maxes.broadcast(dims));
+		Tensor<T> exponentiated = maxSubtracted.exp();
+		Tensor<T> sums = exponentiated.sum(dim, true);
+		Tensor<T> result = exponentiated.elementwiseDivide(sums.broadcast(dims));
+
+		return result;
 	}
 
 	/// <summary>
@@ -778,16 +830,35 @@ private:
 	/// </summary>
 	/// <param name="dims"></param>
 	/// <returns>The total size of the data vector.</returns>
-	int createCoordinateConversionLookupTable(const vector<int> &dims) {
-		coordinateConversionLookupTable = vector<int>(dims.size());
+	[[nodiscard]]
+	vector<int> createCoordinateConversionLookupTable(const vector<int> &dims) const {
+		assert(dims.size() > 0);
+
+		vector<int> lookupTable(dims.size());
 
 		// Total number of elements in data
 		int size = 1;
 		for (int i = 0; i < dims.size(); i++) {
-			// Initialize back to front since we can use size for the lookup table if we do it like this
 			int currentIndex = static_cast<int>(dims.size()) - 1 - i;
-			coordinateConversionLookupTable[currentIndex] = size;
+			lookupTable[currentIndex] = size;
 			size *= dims[currentIndex];
+		}
+
+		return lookupTable;
+	}
+
+	/// <summary>
+	/// Multiplies the dims together to get the total size.
+	/// </summary>
+	/// <param name="dims"></param>
+	/// <returns></returns>
+	[[nodiscard]]
+	int getSizeFromDims(const vector<int> &dims) {
+		assert(dims.size() > 0);
+
+		int size = 1;
+		for (int i = 0; i < dims.size(); i++) {
+			size *= dims[i];
 		}
 
 		return size;
