@@ -11,8 +11,6 @@
 
 #include "TensorKernels.cuh"
 
-using std::vector, std::cout, std::endl, std::string, std::default_random_engine, std::normal_distribution, std::uniform_real_distribution;
-
 /// <summary>
 /// A multidimensional array.
 /// </summary>
@@ -35,20 +33,20 @@ public:
 	/// (Ex. 0 for int).
 	/// </summary>
 	/// <param name="dims"></param>
-	Tensor(const vector<int> &dims) : dims(dims) {
+	Tensor(const std::vector<int> &dims) : dims(dims) {
 		assert(dims.size() > 0);
 		coordinateConversionLookupTable = createCoordinateConversionLookupTable(dims);
 		assert(coordinateConversionLookupTable.size() > 0);
 		int size = getSizeFromDims(dims);
 		assert(size > 0);
-		data = vector<T>(size);
+		data = std::vector<T>(size);
 	}
 
 	/// <summary>
 	/// Initializes data using the given vector.
 	/// </summary>
 	/// <param name="dims"></param>
-	Tensor(const vector<T> &data, const vector<int> &dims) : data(data), dims(dims) {
+	Tensor(const std::vector<T> &data, const std::vector<int> &dims) : data(data), dims(dims) {
 		assert(dims.size() > 0);
 		coordinateConversionLookupTable = createCoordinateConversionLookupTable(dims);
 		int size = getSizeFromDims(dims);
@@ -91,7 +89,7 @@ public:
 	/// <param name="indices"></param>
 	/// <returns>The element at the specified indices.</returns>
 	[[nodiscard]]
-	T get(const vector<int> &indices) const {
+	T get(const std::vector<int> &indices) const {
 		int flattenedIndex = getFlattenedIndex(indices);
 		return data[flattenedIndex];
 	}
@@ -101,7 +99,7 @@ public:
 	/// </summary>
 	/// <param name="indices"></param>
 	/// <param name="value"></param>
-	void set(const vector<int> &indices, T value) {
+	void set(const std::vector<int> &indices, T value) {
 		int flattenedIndex = getFlattenedIndex(indices);
 		data[flattenedIndex] = value;
 	}
@@ -112,7 +110,7 @@ public:
 	/// </summary>
 	/// <param name="normalDistribution"></param>
 	/// <param name="randomEngine"></param>
-	void setToRandom(normal_distribution<T> normalDistribution, default_random_engine randomEngine) {
+	void setToRandom(std::normal_distribution<T> normalDistribution, std::default_random_engine randomEngine) {
 		for (int i = 0; i < data.size(); i++) {
 			data[i] = normalDistribution(randomEngine);
 		}
@@ -124,7 +122,7 @@ public:
 	/// </summary>
 	/// <param name="uniformDistribution"></param>
 	/// <param name="randomEngine"></param>
-	void setToRandom(uniform_real_distribution<T> &uniformDistribution, default_random_engine &randomEngine) {
+	void setToRandom(std::uniform_real_distribution<T> &uniformDistribution, std::default_random_engine &randomEngine) {
 		for (int i = 0; i < data.size(); i++) {
 			data[i] = uniformDistribution(randomEngine);
 		}
@@ -144,7 +142,7 @@ public:
 	/// </summary>
 	/// <returns></returns>
 	[[nodiscard]]
-	vector<int> getDims() const {
+	std::vector<int> getDims() const {
 		return dims;
 	}
 
@@ -152,7 +150,7 @@ public:
 	/// Reshapes the tensor.
 	/// </summary>
 	/// <param name="dims"></param>
-	void reinterpretDims(const vector<int> &dims) {
+	void reinterpretDims(const std::vector<int> &dims) {
 		coordinateConversionLookupTable = createCoordinateConversionLookupTable(dims);
 		int size = getSizeFromDims(dims);
 		assert(size == data.size());
@@ -165,7 +163,7 @@ public:
 	/// </summary>
 	void flattenOnce() {
 		assert(dims.size() > 1);
-		vector<int> newDims = dims;
+		std::vector<int> newDims = dims;
 		newDims[0] *= newDims[1];
 		newDims.erase(newDims.begin() + 1);
 		reinterpretDims(newDims);
@@ -196,11 +194,11 @@ public:
 	/// <param name="broadcastedDims"></param>
 	/// <returns>The expanded tensor.</returns>
 	[[nodiscard]]
-	Tensor<T> broadcast(const vector<int> &broadcastedDims) const {
+	Tensor<T> broadcast(const std::vector<int> &broadcastedDims) const {
 		assert(dims.size() > 0 && broadcastedDims.size() > 0);
 		assert(broadcastedDims.size() >= dims.size());
 
-		vector<int> paddedDims = dims;
+		std::vector<int> paddedDims = dims;
 		// Add dummy dimensions
 		while (paddedDims.size() < broadcastedDims.size()) {
 			paddedDims.insert(paddedDims.begin(), 1);
@@ -212,8 +210,8 @@ public:
 			assert(paddedDims[i] == 1 || paddedDims[i] == broadcastedDims[i]);
 		}
 
-		vector<int> paddedLookupTable = createCoordinateConversionLookupTable(paddedDims);
-		vector<int> broadcastedLookupTable = createCoordinateConversionLookupTable(broadcastedDims);
+		std::vector<int> paddedLookupTable = createCoordinateConversionLookupTable(paddedDims);
+		std::vector<int> broadcastedLookupTable = createCoordinateConversionLookupTable(broadcastedDims);
 
 		Tensor<T> broadcasted(broadcastedDims);
 
@@ -239,17 +237,17 @@ public:
 	/// <param name="randomEngine"></param>
 	/// <returns></returns>
 	[[nodiscard]]
-	vector<int> getRandomIndices(int batchSize, default_random_engine &randomEngine) const {
+	std::vector<int> getRandomIndices(int batchSize, std::default_random_engine &randomEngine) const {
 		const int totalNumSamples = dims[0];
 		assert(batchSize <= totalNumSamples);
-		vector<int> indices(totalNumSamples);
+		std::vector<int> indices(totalNumSamples);
 		for (int i = 0; i < totalNumSamples; i++) {
 			indices[i] = i;
 		}
 
 		std::shuffle(indices.begin(), indices.end(), randomEngine);
 
-		return vector<int>(indices.begin(), indices.begin() + batchSize);
+		return std::vector<int>(indices.begin(), indices.begin() + batchSize);
 	}
 
 	/// <summary>
@@ -258,11 +256,11 @@ public:
 	/// <param name="indices"></param>
 	/// <returns>A tensor with dims = { batchSize,dims[1],dims[2],dims[3]... }</returns>
 	[[nodiscard]]
-	Tensor<T> getBatch(const vector<int> &indices) const {
+	Tensor<T> getBatch(const std::vector<int> &indices) const {
 		const int batchSize = static_cast<int>(indices.size());
 		const int totalNumSamples = dims[0];
 		assert(batchSize <= totalNumSamples);
-		vector<int> batchDims = dims;
+		std::vector<int> batchDims = dims;
 		batchDims[0] = static_cast<int>(indices.size());
 		Tensor<T> batch(batchDims);
 		assert(coordinateConversionLookupTable == batch.coordinateConversionLookupTable);
@@ -273,6 +271,51 @@ public:
 		}
 
 		return batch;
+	}
+
+	/// <summary>
+	/// Gets a single sample from the tensor, where the first dimension is the batch.
+	/// </summary>
+	/// <param name="index">The index of the sample relative to the batch.</param>
+	/// <returns></returns>
+	[[nodiscard]]
+	Tensor<T> getSampleAt(int index, bool keepDummyDim = false) const {
+		assert(dims.size() > 0 && index < dims[0]);
+		std::vector<int> sampleDims = dims;
+		if (keepDummyDim) {
+			sampleDims[0] = 1;
+		}
+
+		else {
+			sampleDims.erase(sampleDims.begin());
+		}
+
+		Tensor<T> sample(sampleDims);
+		const int sampleSize = coordinateConversionLookupTable[0];
+		for (int i = 0; i < sampleSize; i++) {
+			sample.data[i] = data[sampleSize * index + i];
+		}
+
+		return sample;
+	}
+
+	/// <summary>
+	/// Converts a one-hot encoded label to an int.
+	/// </summary>
+	/// <param name="index">The index of the sample relative to the batch.</param>
+	/// <returns></returns>
+	[[nodiscard]]
+	int convertLabelToInt(int index) const {
+		assert(dims.size() > 0 && index < dims[0]);
+
+		const int sampleSize = coordinateConversionLookupTable[0];
+		for (int i = 0; i < sampleSize; i++) {
+			if (data[sampleSize * index + i] == 1) {
+				return i;
+			}
+		}
+
+		throw std::runtime_error("One-hot label has no one");
 	}
 
 	/// <summary>
@@ -451,7 +494,7 @@ public:
 	Tensor<T> sum(int dim, bool keepDummyDim = false) const {
 		assert(dim < dims.size());
 
-		vector<int> sumDims = dims;
+		std::vector<int> sumDims = dims;
 		if (keepDummyDim) {
 			sumDims[dim] = 1;
 		}
@@ -520,7 +563,7 @@ public:
 	Tensor<T> max(int dim, bool keepDummyDim = false) const {
 		assert(dim < dims.size());
 
-		vector<int> maxDims = dims;
+		std::vector<int> maxDims = dims;
 		if (keepDummyDim) {
 			maxDims[dim] = 1;
 		}
@@ -604,7 +647,7 @@ public:
 	[[nodiscard]]
 	Tensor<T> elementwiseAdd(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<T> sum(data.size());
+		std::vector<T> sum(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
 			sum[i] = static_cast<T>(data[i] + other.data[i]);
@@ -633,7 +676,7 @@ public:
 	[[nodiscard]]
 	Tensor<T> elementwiseSubtract(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<T> difference(data.size());
+		std::vector<T> difference(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
 			difference[i] = static_cast<T>(data[i] - other.data[i]);
@@ -662,7 +705,7 @@ public:
 	[[nodiscard]]
 	Tensor<T> elementwiseMultiply(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<T> product(data.size());
+		std::vector<T> product(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
 			product[i] = static_cast<T>(data[i] * other.data[i]);
@@ -694,7 +737,7 @@ public:
 	[[nodiscard]]
 	Tensor<T> elementwiseDivide(const Tensor<T> &other) const {
 		assert(dims == other.dims);
-		vector<T> quotient(data.size());
+		std::vector<T> quotient(data.size());
 		for (int i = 0; i < data.size(); i++) {
 			// Only cast AFTER the operation has completed
 			quotient[i] = static_cast<T>(data[i] / other.data[i]);
@@ -764,13 +807,13 @@ public:
 	/// <summary>
 	/// Prints a 2d tensor to console. Dimensions are represented as { row,col }.
 	/// </summary>
-	void print2d(string delimiter = " ") const {
+	void print2d(std::string delimiter = " ") const {
 		assert(dims.size() == 2);
 		for (int row = 0; row < dims[0]; row++) {
 			for (int col = 0; col < dims[1]; col++) {
-				cout << get({ row,col }) << delimiter;
+				std::cout << get({ row,col }) << delimiter;
 			}
-			cout << endl;
+			std::cout << std::endl;
 		}
 	}
 
@@ -784,29 +827,29 @@ public:
 			for (int col = 0; col < dims[1]; col++) {
 				T value = get({ row,col });
 				if (value >= threshold) {
-					cout << "#";
+					std::cout << "#";
 				}
 
 				else {
-					cout << " ";
+					std::cout << " ";
 				}
 			}
-			cout << endl;
+			std::cout << std::endl;
 		}
 	}
 
 	/// <summary>
 	/// Prints a 3d tensor to console. Dimensions are represented as { row,col,depth }.
 	/// </summary>
-	void print3d(string delimiter = " ") const {
+	void print3d(std::string delimiter = " ") const {
 		assert(dims.size() == 3);
 		for (int depth = 0; depth < dims[2]; depth++) {
-			cout << "Depth: " << depth << endl;
+			std::cout << "Depth: " << depth << std::endl;
 			for (int row = 0; row < dims[0]; row++) {
 				for (int col = 0; col < dims[1]; col++) {
-					cout << get({ row,col,depth}) << delimiter;
+					std::cout << get({ row,col,depth}) << delimiter;
 				}
-				cout << endl;
+				std::cout << std::endl;
 			}
 		}
 	}
@@ -815,16 +858,16 @@ private:
 	/// <summary>
 	/// A vector containing the flattened data from a multidimensional tensor.
 	/// </summary>
-	vector<T> data;
+	std::vector<T> data;
 	/// <summary>
 	/// The dimensions of the tensor. 
 	/// (Ex. { 2,3 } for a matrix with 2 rows and 3 columns).
 	/// </summary>
-	vector<int> dims;
+	std::vector<int> dims;
 	/// <summary>
 	/// Lookup table used for converting multidimensional coordinates to a flattened representation.
 	/// </summary>
-	vector<int> coordinateConversionLookupTable;
+	std::vector<int> coordinateConversionLookupTable;
 
 	/// <summary>
 	/// Creates the coordinate conversion table, and returns the total size of data.
@@ -832,10 +875,10 @@ private:
 	/// <param name="dims"></param>
 	/// <returns>The total size of the data vector.</returns>
 	[[nodiscard]]
-	vector<int> createCoordinateConversionLookupTable(const vector<int> &dims) const {
+	std::vector<int> createCoordinateConversionLookupTable(const std::vector<int> &dims) const {
 		assert(dims.size() > 0);
 
-		vector<int> lookupTable(dims.size());
+		std::vector<int> lookupTable(dims.size());
 
 		// Total number of elements in data
 		int size = 1;
@@ -854,7 +897,7 @@ private:
 	/// <param name="dims"></param>
 	/// <returns></returns>
 	[[nodiscard]]
-	int getSizeFromDims(const vector<int> &dims) {
+	int getSizeFromDims(const std::vector<int> &dims) {
 		assert(dims.size() > 0);
 
 		int size = 1;
@@ -871,7 +914,7 @@ private:
 	/// <param name="indices"></param>
 	/// <returns>The flattened index</returns>
 	[[nodiscard]]
-	int getFlattenedIndex(const vector<int> &indices) const {
+	int getFlattenedIndex(const std::vector<int> &indices) const {
 		int flattenedIndex = 0;
 		for (int i = 0; i < indices.size(); i++) {
 			// Make sure the index isn't out of bounds
@@ -889,7 +932,7 @@ private:
 	/// <param name="status"></param>
 	void checkCuda(const cudaError_t &status) const {
 		if (status != cudaSuccess) {
-			cout << cudaGetErrorString(status) << "in " << __FILE__  << " at line " << __LINE__ << endl;
+			std::cout << cudaGetErrorString(status) << "in " << __FILE__  << " at line " << __LINE__ << std::endl;
 			exit(-1);
 		}
 	}

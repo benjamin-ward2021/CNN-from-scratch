@@ -141,9 +141,6 @@
     <CudaCompile Include="main.cu">
       <FileType>Document</FileType>
     </CudaCompile>
-    <CudaCompile Include="MNISTLoader.cu">
-      <FileType>Document</FileType>
-    </CudaCompile>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="FullyConnected.cuh" />

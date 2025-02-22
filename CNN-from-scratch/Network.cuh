@@ -1,22 +1,22 @@
 #pragma once
 
+#include <concepts>
+
 #include "Layer.cuh"
 #include "FullyConnected.cuh"
 #include "ReLU.cuh"
 #include "SoftmaxCrossEntropy.cuh"
 #include "Tensor.cuh"
 
-using std::vector, std::unique_ptr;
-
 /// <summary>
 /// The collection of layers, and methods for predicting and training.
 /// T is the type of the inputs and outputs. (Ex. float, double).
 /// </summary>
 /// <typeparam name="T"></typeparam>
-template <typename T>
+template <typename T> requires std::floating_point<T>
 class Network {
 public:
-	Network(vector<unique_ptr<Layer<T>>> layers) : layers(std::move(layers)) {}
+	Network(std::vector<std::unique_ptr<Layer<T>>> layers) : layers(std::move(layers)) {}
 
 	/// <summary>
 	/// Performs forward propagation over all the layers.
@@ -75,5 +75,5 @@ public:
 
 private:
 	// Use a pointer to prevent object slicing
-	vector<unique_ptr<Layer<T>>> layers;
+	std::vector<std::unique_ptr<Layer<T>>> layers;
 };

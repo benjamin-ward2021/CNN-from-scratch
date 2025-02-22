@@ -1,5 +1,7 @@
 #pragma once
 
+#include <concepts>
+
 #include "Layer.cuh"
 #include "Tensor.cuh"
 
@@ -8,7 +10,7 @@
 /// T is the type of the inputs and outputs. (Ex. float, double).
 /// </summary>
 /// <typeparam name="T"></typeparam>
-template <typename T>
+template <typename T> requires std::floating_point<T>
 class ReLU : public Layer<T> {
 public:
 	ReLU() : inputs(Tensor<T>()) {}

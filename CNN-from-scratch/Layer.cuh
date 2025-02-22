@@ -1,5 +1,7 @@
 #pragma once
 
+#include <concepts>
+
 #include "Tensor.cuh"
 
 /// <summary>
@@ -8,7 +10,7 @@
 /// All layers in an architecture must share the same type T.
 /// </summary>
 /// <typeparam name="T"></typeparam>
-template<typename T>
+template<typename T> requires std::floating_point<T>
 class Layer {
 public:
 	// Note that layers are allowed to mutate the inputs during forward propagation.

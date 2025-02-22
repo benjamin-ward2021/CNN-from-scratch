@@ -2,18 +2,17 @@
 
 #include <random>
 #include <cassert>
+#include <concepts>
 
 #include "Layer.cuh"
 #include "Tensor.cuh"
-
-using std::default_random_engine, std::normal_distribution, std::uniform_real_distribution;
 
 /// <summary>
 /// A fully connected layer. 
 /// T is the type of the input, output, weights, and biases. (Ex. float, double).
 /// </summary>
 /// <typeparam name="T"></typeparam>
-template <typename T>
+template <typename T> requires std::floating_point<T>
 class FullyConnected : public Layer<T> {
 public:
 	FullyConnected(int inputSize, int outputSize, T learningRate, bool useGPU = true, int rngSeed = 0, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
@@ -26,10 +25,10 @@ public:
 		useGPU(useGPU) {
 
 		assert(weightInitializationHeuristic == heNormal || weightInitializationHeuristic == xavierUniform);
-		default_random_engine randomEngine(rngSeed);
+		std::default_random_engine randomEngine(rngSeed);
 
 		if (weightInitializationHeuristic == heNormal) {
-			normal_distribution<T> normalDistribution(static_cast<T>(0), static_cast<T>(sqrt(2.0 / inputSize)));
+			std::normal_distribution<T> normalDistribution(static_cast<T>(0), static_cast<T>(sqrt(2.0 / inputSize)));
 			// Set weights according to normal he initialization
 			weights.setToRandom(normalDistribution, randomEngine);
 
@@ -39,7 +38,7 @@ public:
 
 		else if (weightInitializationHeuristic == xavierUniform) {
 			T bound = static_cast<T>(sqrt(6.0 / (inputSize + outputSize)));
-			uniform_real_distribution<T> uniformDistribution(-bound, bound);
+			std::uniform_real_distribution<T> uniformDistribution(-bound, bound);
 			// Set weights according to uniform xavier initialization
 			weights.setToRandom(uniformDistribution, randomEngine);
 
@@ -58,13 +57,13 @@ public:
 		const int batchSize = inputs.getDims()[0];
 
 		inputs.reverseFlattenTo2d();
-		assert((inputs.getDims() == vector<int>{ batchSize,inputSize }));
+		assert((inputs.getDims() == std::vector<int>{ batchSize,inputSize }));
 		this->inputs = inputs;
 
 		// If Y = outputs, W = weights, X = inputs, B = biases...
 		// Y = X * W + B
 		Tensor<T> outputs = useGPU ? inputs.matrixMultiplyGPU(weights) : inputs.matrixMultiply(weights);
-		assert((outputs.getDims() == vector<int>{ batchSize,outputSize }));
+		assert((outputs.getDims() == std::vector<int>{ batchSize,outputSize }));
 		outputs.elementwiseAddInPlace(biases.broadcast(outputs.getDims()));
 		return outputs;
 	}
@@ -78,21 +77,21 @@ public:
 		const int batchSize = gradWrtOutputs.getDims()[0];
 
 		assert(inputs != Tensor<T>());
-		assert((inputs.getDims() == vector<int>{ batchSize,inputSize }));
-		assert((gradWrtOutputs.getDims() == vector<int>{ batchSize,outputSize }));
+		assert((inputs.getDims() == std::vector<int>{ batchSize,inputSize }));
+		assert((gradWrtOutputs.getDims() == std::vector<int>{ batchSize,outputSize }));
 
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dW = dL/dY * dY/dW. Since Y = X * W + B, dY/dW = X. So dL/dW = transpose(X) * dL/dY.
 		Tensor<T> gradWrtWeights = useGPU ? inputs.transpose().matrixMultiplyGPU(gradWrtOutputs) : inputs.transpose().matrixMultiply(gradWrtOutputs);
-		assert((gradWrtWeights.getDims() == vector<int>{ inputSize,outputSize }));
+		assert((gradWrtWeights.getDims() == std::vector<int>{ inputSize,outputSize }));
 
 		// dL/dB = dL/dY * dY/dB. Since Y = X * W + B, dY/dB = 1. So dL/dB = 1 * dL/dY.
 		Tensor<T> gradWrtBiases = gradWrtOutputs.sum(0);
-		assert((gradWrtBiases.getDims() == vector<int>{ outputSize }));
+		assert((gradWrtBiases.getDims() == std::vector<int>{ outputSize }));
 
 		// dL/dX = dL/dY * dY/dX. Since Y = X * W + B, dY/dX = W. So dL/dX = dL/dY * transpose(W).
 		Tensor<T> gradWrtInputs = useGPU ? gradWrtOutputs.matrixMultiplyGPU(weights.transpose()) : gradWrtOutputs.matrixMultiply(weights.transpose());
-		assert((gradWrtInputs.getDims() == vector<int>{ batchSize,inputSize }));
+		assert((gradWrtInputs.getDims() == std::vector<int>{ batchSize,inputSize }));
 
 		// Update weights and biases
 		weights.elementwiseSubtractInPlace(gradWrtWeights.scalarMultiply(learningRate));

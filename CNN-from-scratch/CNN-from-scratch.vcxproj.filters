@@ -62,8 +62,5 @@
     <CudaCompile Include="main.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
-    <CudaCompile Include="MNISTLoader.cu">
-      <Filter>Source Files</Filter>
-    </CudaCompile>
   </ItemGroup>
 </Project>
