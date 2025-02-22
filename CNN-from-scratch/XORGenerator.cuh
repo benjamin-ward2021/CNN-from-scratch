@@ -12,11 +12,11 @@
 template <typename T> requires std::floating_point<T>
 class XORGenerator {
 public:
-	XORGenerator(int seed) : randomEngine(seed), uniformDistribution(static_cast<T>(-1), static_cast<T>(1)) {}
+	XORGenerator(int seed) : randomEngine(seed), uniformDistribution(static_cast<T>(0), static_cast<T>(1)) {}
 
 	/// <summary>
 	/// Generates two numbers between 0 and 1, and gives 
-	/// a label of { 1,0 } if they are on different sides of 0, and { 0,1 } if they aren't.
+	/// a label of { 1,0 } if they are on different sides of 0.5, and { 0,1 } if they aren't.
 	/// </summary>
 	/// <param name="totalNumSamples"></param>
 	void generate(int totalNumSamples) {
@@ -27,7 +27,7 @@ public:
 			T x2 = uniformDistribution(randomEngine);
 			inputs.set({ i,0 }, x1);
 			inputs.set({ i,1 }, x2);
-			bool isXor = x1 >= static_cast<T>(0) != x2 >= static_cast<T>(0);
+			bool isXor = x1 >= static_cast<T>(0.5) != x2 >= static_cast<T>(0.5);
 			if (isXor) {
 				labels.set({ i,0 }, 1);
 				labels.set({ i,1 }, 0);

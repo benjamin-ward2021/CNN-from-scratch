@@ -15,7 +15,7 @@
 template <typename T> requires std::floating_point<T>
 class FullyConnected : public Layer<T> {
 public:
-	FullyConnected(int inputSize, int outputSize, T learningRate, bool useGPU = true, int rngSeed = 0, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
+	FullyConnected(int inputSize, int outputSize, T learningRate, int rngSeed, bool useGPU = true, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
 		: inputSize(inputSize), 
 		outputSize(outputSize), 
 		weights(Tensor<T>({ inputSize,outputSize })), 

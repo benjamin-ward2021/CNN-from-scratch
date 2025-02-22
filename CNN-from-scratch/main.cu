@@ -27,17 +27,17 @@ void testNetwork() {
 	XORGenerator<double> generator(0);
 	generator.generate(1024);
 
-	std::default_random_engine randomEngine(0);
+	std::default_random_engine randomEngine(1);
 
 	std::vector<std::unique_ptr<Layer<double>>> layers;
-	layers.push_back(std::make_unique<FullyConnected<double>>(2, 11, 0.003));
+	layers.push_back(std::make_unique<FullyConnected<double>>(2, 5, 0.05, randomEngine()));
 	layers.push_back(std::make_unique<ReLU<double>>());
-	layers.push_back(std::make_unique<FullyConnected<double>>(11, 2, 0.003));
+	layers.push_back(std::make_unique<FullyConnected<double>>(5, 2, 0.05, randomEngine()));
 	layers.push_back(std::make_unique<SoftmaxCrossEntropy<double>>());
 
 	Network network(std::move(layers));
 	for (int i = 0; i < 1000000; i++) {
-		std::vector<int> indices = generator.getInputs().getRandomIndices(32, randomEngine);
+		std::vector<int> indices = generator.getInputs().getRandomIndices(64, randomEngine);
 		Tensor<double> inputs = generator.getInputs().getBatch(indices);
 		Tensor<int> labels = generator.getLabels().getBatch(indices);
 
