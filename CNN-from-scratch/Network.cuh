@@ -73,6 +73,57 @@ public:
 		return loss(predicted, labels.convert<T>());
 	}
 
+	/// <summary>
+	/// Computes the accuracy.
+	/// </summary>
+	/// <param name="labels"></param>
+	/// <returns></returns>
+	T accuracy(const Tensor<T> &predicted, const Tensor<T> &labels) const {
+		assert(predicted.getDims() == labels.getDims());
+		assert(predicted.getDims().size() == 2);
+
+		const int batchSize = predicted.getDims()[0];
+		const int numClasses = predicted.getDims()[1];
+		T correct = 0;
+
+		for (int i = 0; i < batchSize; ++i) {
+			// Find predicted class
+			int predClass = 0;
+			T maxVal = predicted.get({ i, 0 });
+			for (int j = 1; j < numClasses; ++j) {
+				T val = predicted.get({ i, j });
+				if (val > maxVal) {
+					maxVal = val;
+					predClass = j;
+				}
+			}
+
+			// Find true class
+			int trueClass = 0;
+			T trueMax = labels.get({ i, 0 });
+			for (int j = 1; j < numClasses; ++j) {
+				T val = labels.get({ i, j });
+				if (val > trueMax) {
+					trueMax = val;
+					trueClass = j;
+				}
+			}
+
+			if (predClass == trueClass) correct += 1;
+		}
+
+		return correct / static_cast<T>(batchSize);
+	}
+
+	/// <summary>
+	/// Computes the accuracy.
+	/// </summary>
+	/// <param name="labels"></param>
+	/// <returns></returns>
+	T accuracy(const Tensor<T> &predicted, const Tensor<int> &labels) const {
+		return accuracy(predicted, labels.convert<T>());
+	}
+
 private:
 	// Use a pointer to prevent object slicing
 	std::vector<std::unique_ptr<Layer<T>>> layers;

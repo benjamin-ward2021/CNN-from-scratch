@@ -53,7 +53,7 @@
     <CudaCompile Include="Tensor.cuh">
       <Filter>Header Files</Filter>
     </CudaCompile>
-    <CudaCompile Include="TensorKernels.cuh">
+    <CudaCompile Include="Kernels.cuh">
       <Filter>Header Files</Filter>
     </CudaCompile>
     <CudaCompile Include="XORGenerator.cuh">
@@ -62,5 +62,10 @@
     <CudaCompile Include="main.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Conv2D.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

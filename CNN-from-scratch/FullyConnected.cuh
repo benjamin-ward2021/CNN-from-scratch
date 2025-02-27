@@ -15,14 +15,14 @@
 template <typename T> requires std::floating_point<T>
 class FullyConnected : public Layer<T> {
 public:
-	FullyConnected(int inputSize, int outputSize, T learningRate, int rngSeed, bool useGPU = true, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
+	FullyConnected(int inputSize, int outputSize, T learningRate, int rngSeed, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
 		: inputSize(inputSize), 
 		outputSize(outputSize), 
 		weights(Tensor<T>({ inputSize,outputSize })), 
 		biases(Tensor<T>({ outputSize })), 
-		inputs(Tensor<T>()), 
-		learningRate(learningRate), 
-		useGPU(useGPU) {
+		flattenedInputs(Tensor<T>()),
+		originalInputsDims(std::vector<int>()),
+		learningRate(learningRate) {
 
 		assert(weightInitializationHeuristic == heNormal || weightInitializationHeuristic == xavierUniform);
 		std::default_random_engine randomEngine(rngSeed);
@@ -56,13 +56,14 @@ public:
 	Tensor<T> forward(Tensor<T> &inputs) override {
 		const int batchSize = inputs.getDims()[0];
 
+		originalInputsDims = inputs.getDims();
 		inputs.reverseFlattenTo2d();
 		assert((inputs.getDims() == std::vector<int>{ batchSize,inputSize }));
-		this->inputs = inputs;
+		flattenedInputs = inputs;
 
 		// If Y = outputs, W = weights, X = inputs, B = biases...
 		// Y = X * W + B
-		Tensor<T> outputs = useGPU ? inputs.matrixMultiplyGPU(weights) : inputs.matrixMultiply(weights);
+		Tensor<T> outputs = flattenedInputs.matrixMultiplyGPU(weights);
 		assert((outputs.getDims() == std::vector<int>{ batchSize,outputSize }));
 		outputs.elementwiseAddInPlace(biases.broadcast(outputs.getDims()));
 		return outputs;
@@ -76,13 +77,13 @@ public:
 	Tensor<T> backward(const Tensor<T> &gradWrtOutputs) override {
 		const int batchSize = gradWrtOutputs.getDims()[0];
 
-		assert(inputs != Tensor<T>());
-		assert((inputs.getDims() == std::vector<int>{ batchSize,inputSize }));
+		assert(flattenedInputs != Tensor<T>());
+		assert((flattenedInputs.getDims() == std::vector<int>{ batchSize,inputSize }));
 		assert((gradWrtOutputs.getDims() == std::vector<int>{ batchSize,outputSize }));
 
 		// If L = loss, Y = outputs, W = weights, X = inputs, B = biases...
 		// dL/dW = dL/dY * dY/dW. Since Y = X * W + B, dY/dW = X. So dL/dW = transpose(X) * dL/dY.
-		Tensor<T> gradWrtWeights = useGPU ? inputs.transpose().matrixMultiplyGPU(gradWrtOutputs) : inputs.transpose().matrixMultiply(gradWrtOutputs);
+		Tensor<T> gradWrtWeights = flattenedInputs.transpose().matrixMultiplyGPU(gradWrtOutputs);
 		assert((gradWrtWeights.getDims() == std::vector<int>{ inputSize,outputSize }));
 
 		// dL/dB = dL/dY * dY/dB. Since Y = X * W + B, dY/dB = 1. So dL/dB = 1 * dL/dY.
@@ -90,14 +91,16 @@ public:
 		assert((gradWrtBiases.getDims() == std::vector<int>{ outputSize }));
 
 		// dL/dX = dL/dY * dY/dX. Since Y = X * W + B, dY/dX = W. So dL/dX = dL/dY * transpose(W).
-		Tensor<T> gradWrtInputs = useGPU ? gradWrtOutputs.matrixMultiplyGPU(weights.transpose()) : gradWrtOutputs.matrixMultiply(weights.transpose());
-		assert((gradWrtInputs.getDims() == std::vector<int>{ batchSize,inputSize }));
+		Tensor<T> gradWrtFlattenedInputs = gradWrtOutputs.matrixMultiplyGPU(weights.transpose());
+		assert((gradWrtFlattenedInputs.getDims() == std::vector<int>{ batchSize,inputSize }));
 
 		// Update weights and biases
 		weights.elementwiseSubtractInPlace(gradWrtWeights.scalarMultiply(learningRate));
 		biases.elementwiseSubtractInPlace(gradWrtBiases.scalarMultiply(learningRate));
 
-		// Return the gradient of loss with respect to inputs so that the previous layer can use it
+		// Return the gradient of loss with respect to inputs in the original dimensions so that the previous layer can use it
+		Tensor<T> gradWrtInputs = gradWrtFlattenedInputs;
+		gradWrtInputs.reinterpretDims(originalInputsDims);
 		return gradWrtInputs;
 	}
 
@@ -115,9 +118,11 @@ private:
 
 	// Amount of outgoing nodes
 	int outputSize;
+	
+	// 2d tensor with dims = { batchSize,inputSize }
+	Tensor<T> flattenedInputs;
 
-	// TODO: Should this be the flattened version? Probably all layers should be consistent in if they modify inputs before saving it.
-	Tensor<T> inputs;
+	std::vector<int> originalInputsDims;
 
 	// 2d tensor with dims = { inputSize,outputSize }
 	Tensor<T> weights;
@@ -127,7 +132,4 @@ private:
 
 	// Multiplied with the gradients when updating weights and biases. Should be between 0 and 1
 	T learningRate;
-
-	// Determines whether the GPU is used for calculations like matrix multiplications
-	bool useGPU;
 };

@@ -9,7 +9,8 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#include "TensorKernels.cuh"
+#include "Kernels.cuh"
+
 
 /// <summary>
 /// A multidimensional array.
@@ -326,6 +327,7 @@ public:
 	/// <param name="tileSize">112 chosen as default based on performance. If working with floats instead of doubles, you could try 160.</param>
 	/// <returns></returns>
 	[[nodiscard]]
+	[[deprecated("All matrix multiplications should be done on the GPU")]]
 	Tensor<T> matrixMultiply(const Tensor<T> &other, const int tileSize = 112) const {
 		assert(dims.size() == 2 && other.dims.size() == 2);
 		assert(dims[1] == other.dims[0]);
@@ -356,6 +358,8 @@ public:
 
 		return product;
 	}
+
+	// TODO: This code should be moved into Kernels.cuh probably
 
 	/// <summary>
 	/// Performs matrix multiplication on the GPU using CUDA. 
@@ -418,6 +422,253 @@ public:
 		cudaFree(deviceProductData);
 
 		return product;
+	}
+
+	/// <summary>
+	/// Calls the CUDA kernel for Conv2D forward propagation.
+	/// </summary>
+	/// <param name="inputs"></param>
+	/// <param name="weights"></param>
+	/// <param name="biases"></param>
+	/// <param name="stride"></param>
+	/// <param name="padding"></param>
+	/// <returns></returns>
+	[[nodiscard]]
+	static Tensor<T> conv2dForwardGPU(const Tensor<T> &inputs, const Tensor<T> &weights, const Tensor<T> &biases, int stride, int padding) {
+		assert(inputs.dims.size() == 4);
+		assert(weights.dims.size() == 4);
+		assert(stride > 0);
+		assert(padding >= 0);
+
+		const int batchSize = inputs.dims[0];
+		const int inputChannels = inputs.dims[1];
+		const int inputHeight = inputs.dims[2];
+		const int inputWidth = inputs.dims[3];
+
+		const int outputChannels = weights.dims[0];
+		assert(inputChannels == weights.dims[1]);
+		const int kernelSize = weights.dims[2];
+		assert(kernelSize == weights.dims[3]);
+
+		const int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
+		const int outputWidth = (inputWidth + 2 * padding - kernelSize) / stride + 1;
+
+		Tensor<T> outputs({ batchSize,outputChannels,outputHeight,outputWidth });
+
+		// Allocate and copy inputs
+		T *deviceInputsData;
+		cudaError_t deviceInputsDataMallocStatus = cudaMalloc((void **)&deviceInputsData, inputs.data.size() * sizeof(T));
+		checkCuda(deviceInputsDataMallocStatus);
+		cudaError_t deviceInputsDataMemcpyStatus = cudaMemcpy(deviceInputsData, inputs.data.data(), inputs.data.size() * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceInputsDataMemcpyStatus);
+
+		// Allocate and copy weights
+		T *deviceWeightsData;
+		cudaError_t deviceWeightsDataMallocStatus = cudaMalloc((void **)&deviceWeightsData, weights.data.size() * sizeof(T));
+		checkCuda(deviceWeightsDataMallocStatus);
+		cudaError_t deviceWeightsDataMemcpyStatus = cudaMemcpy(deviceWeightsData, weights.data.data(), weights.data.size() * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceWeightsDataMemcpyStatus);
+
+		// Allocate and copy biases
+		T *deviceBiasesData;
+		cudaError_t deviceBiasesDataMallocStatus = cudaMalloc((void **)&deviceBiasesData, biases.data.size() * sizeof(T));
+		checkCuda(deviceBiasesDataMallocStatus);
+		cudaError_t deviceBiasesDataMemcpyStatus = cudaMemcpy(deviceBiasesData, biases.data.data(), biases.data.size() * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceBiasesDataMemcpyStatus);
+
+		// Allocate outputs (nothing to copy)
+		T *deviceOutputsData;
+		cudaError_t deviceOutputsDataMallocStatus = cudaMalloc((void **)&deviceOutputsData, outputs.data.size() * sizeof(T));
+		checkCuda(deviceOutputsDataMallocStatus);
+
+		// Launch kernel
+		const int totalThreads = batchSize * outputChannels * outputHeight * outputWidth;
+		const int blockSize = 256;
+		const int gridSize = (totalThreads + blockSize - 1) / blockSize;
+
+		Conv2DKernels::forwardGPUKernel<<<gridSize, blockSize>>> (deviceInputsData, deviceWeightsData, deviceBiasesData, deviceOutputsData,
+			batchSize, inputChannels, inputHeight, inputWidth,
+			outputChannels, kernelSize, stride, padding,
+			outputHeight, outputWidth);
+
+		// Copy result back
+		cudaError_t deviceOutputsDataMemcpyStatus = cudaMemcpy(outputs.data.data(), deviceOutputsData, outputs.data.size() * sizeof(T), cudaMemcpyDeviceToHost);
+		checkCuda(deviceOutputsDataMemcpyStatus);
+
+		// Cleanup
+		cudaFree(deviceInputsData);
+		cudaFree(deviceWeightsData);
+		cudaFree(deviceOutputsData);
+		cudaFree(deviceBiasesData);
+
+		return outputs;
+	}
+
+	/// <summary>
+	/// Calls the CUDA kernel for Conv2D gradient computation with respect to weights.
+	/// </summary>
+	/// <param name="inputs"></param>
+	/// <param name="gradWrtOutputs"></param>
+	/// <param name="weights"></param>
+	/// <param name="stride"></param>
+	/// <param name="padding"></param>
+	/// <returns></returns>
+	[[nodiscard]]
+	static Tensor<T> conv2dGradWeightsGPU(const Tensor<T> &inputs, const Tensor<T> &gradWrtOutputs,
+		const Tensor<T> &weights, int stride, int padding) {
+		assert(inputs.dims.size() == 4);
+		assert(gradWrtOutputs.dims.size() == 4);
+		assert(weights.dims.size() == 4);
+		assert(stride > 0);
+		assert(padding >= 0);
+
+		const int batchSize = inputs.dims[0];
+		const int inputChannels = inputs.dims[1];
+		const int inputHeight = inputs.dims[2];
+		const int inputWidth = inputs.dims[3];
+
+		const int outputChannels = weights.dims[0];
+		assert(inputChannels == weights.dims[1]);
+		const int kernelSize = weights.dims[2];
+		assert(kernelSize == weights.dims[3]);
+
+		const int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
+		const int outputWidth = (inputWidth + 2 * padding - kernelSize) / stride + 1;
+
+		assert(gradWrtOutputs.dims[0] == batchSize);
+		assert(gradWrtOutputs.dims[1] == outputChannels);
+		assert(gradWrtOutputs.dims[2] == outputHeight);
+		assert(gradWrtOutputs.dims[3] == outputWidth);
+
+		Tensor<T> gradWrtWeights({ outputChannels, inputChannels, kernelSize, kernelSize });
+
+		// Allocate and copy inputs
+		T *deviceInputsData;
+		cudaError_t deviceInputsDataMallocStatus = cudaMalloc((void **)&deviceInputsData, inputs.data.size() * sizeof(T));
+		checkCuda(deviceInputsDataMallocStatus);
+		cudaError_t deviceInputsDataMemcpyStatus = cudaMemcpy(deviceInputsData, inputs.data.data(), inputs.data.size() * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceInputsDataMemcpyStatus);
+
+		// Allocate and copy gradient with respect to outputs
+		T *deviceGradWrtOutputsData;
+		cudaError_t deviceGradWrtOutputsDataMallocStatus = cudaMalloc((void **)&deviceGradWrtOutputsData, gradWrtOutputs.data.size() * sizeof(T));
+		checkCuda(deviceGradWrtOutputsDataMallocStatus);
+		cudaError_t deviceGradWrtOutputsDataMemcpyStatus = cudaMemcpy(deviceGradWrtOutputsData, gradWrtOutputs.data.data(), gradWrtOutputs.data.size() * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceGradWrtOutputsDataMemcpyStatus);
+
+		// Allocate and memset gradient with respect to weights
+		T *deviceGradWrtWeightsData;
+		cudaError_t deviceGradWrtWeightsDataMallocStatus = cudaMalloc((void **)&deviceGradWrtWeightsData, gradWrtWeights.data.size() * sizeof(T));
+		checkCuda(deviceGradWrtWeightsDataMallocStatus);
+		cudaError_t deviceGradWrtWeightsDataMemsetStatus = cudaMemset(deviceGradWrtWeightsData, 0, gradWrtWeights.data.size() * sizeof(T));
+		checkCuda(deviceGradWrtWeightsDataMemsetStatus);
+
+		// Launch kernel
+		// TODO: This is an inefficient setup
+		const int kernelElements = kernelSize * kernelSize;
+		dim3 grid_dim(outputChannels, inputChannels, kernelElements);
+		dim3 block_dim(1);
+
+		Conv2DKernels::gradWrtWeightsGPUKernel <<<grid_dim, block_dim >>> (
+			deviceInputsData, deviceGradWrtOutputsData, deviceGradWrtWeightsData,
+			batchSize, inputChannels, inputHeight, inputWidth,
+			outputChannels, kernelSize, stride, padding,
+			outputHeight, outputWidth);
+
+		// Copy result back
+		cudaError_t deviceGradWrtWeightsDataMemcpyStatus = cudaMemcpy(gradWrtWeights.data.data(), deviceGradWrtWeightsData, gradWrtWeights.data.size() * sizeof(T), cudaMemcpyDeviceToHost);
+		checkCuda(deviceGradWrtWeightsDataMemcpyStatus);
+
+		// Cleanup
+		cudaFree(deviceInputsData);
+		cudaFree(deviceGradWrtOutputsData);
+		cudaFree(deviceGradWrtWeightsData);
+
+		return gradWrtWeights;
+	}
+
+	/// <summary>
+	/// Calls the CUDA kernel for Conv2D gradient computation with respect to inputs.
+	/// </summary>
+	/// <param name="gradWrtOutputs"></param>
+	/// <param name="weights"></param>
+	/// <param name="inputs"></param>
+	/// <param name="stride"></param>
+	/// <param name="padding"></param>
+	/// <returns></returns>
+	[[nodiscard]]
+	static Tensor<T> conv2dGradInputsGPU(const Tensor<T> &gradWrtOutputs,
+		const Tensor<T> &weights,
+		const Tensor<T> &inputs,
+		int stride, int padding) {
+		assert(gradWrtOutputs.dims.size() == 4);
+		assert(weights.dims.size() == 4);
+		assert(inputs.dims.size() == 4);
+		assert(stride > 0);
+		assert(padding >= 0);
+
+		const int batchSize = inputs.dims[0];
+		const int inputChannels = inputs.dims[1];
+		const int inputHeight = inputs.dims[2];
+		const int inputWidth = inputs.dims[3];
+
+		const int outputChannels = weights.dims[0];
+		assert(inputChannels == weights.dims[1]);
+		const int kernelSize = weights.dims[2];
+		assert(kernelSize == weights.dims[3]);
+
+		const int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
+		const int outputWidth = (inputWidth + 2 * padding - kernelSize) / stride + 1;
+
+		assert(gradWrtOutputs.dims[0] == batchSize);
+		assert(gradWrtOutputs.dims[1] == outputChannels);
+		assert(gradWrtOutputs.dims[2] == outputHeight);
+		assert(gradWrtOutputs.dims[3] == outputWidth);
+
+		Tensor<T> gradWrtInputs(inputs.dims);
+
+		// Allocate and copy deviceGradWrtOutputsData
+		T *deviceGradWrtOutputsData;
+		cudaError_t deviceGradWrtOutputsDataMallocStatus = cudaMalloc((void **)&deviceGradWrtOutputsData, gradWrtOutputs.data.size() * sizeof(T));
+		checkCuda(deviceGradWrtOutputsDataMallocStatus);
+		cudaError_t deviceGradWrtOutputsDataMemcpyStatus = cudaMemcpy(deviceGradWrtOutputsData, gradWrtOutputs.data.data(), gradWrtOutputs.data.size() * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceGradWrtOutputsDataMemcpyStatus);
+
+		// Allocate and copy weights
+		T *deviceWeightsData;
+		cudaError_t deviceWeightsDataMallocStatus = cudaMalloc((void **)&deviceWeightsData, weights.data.size() * sizeof(T));
+		checkCuda(deviceWeightsDataMallocStatus);
+		cudaError_t deviceWeightsDataMemcpyStatus = cudaMemcpy(deviceWeightsData, weights.data.data(), weights.data.size() * sizeof(T), cudaMemcpyHostToDevice);
+		checkCuda(deviceWeightsDataMemcpyStatus);
+
+		// Allocate and memset gradient with respect to inputs
+		T *deviceGradWrtInputsData;
+		cudaError_t deviceGradWrtInputsDataMallocStatus = cudaMalloc((void **)&deviceGradWrtInputsData, gradWrtInputs.data.size() * sizeof(T));
+		checkCuda(deviceGradWrtInputsDataMallocStatus);
+		cudaError_t deviceGradWrtInputsDataMemsetStatus = cudaMemset(deviceGradWrtInputsData, 0, gradWrtInputs.data.size() * sizeof(T));
+		checkCuda(deviceGradWrtInputsDataMemsetStatus);
+
+		// Launch kernel
+		const int totalThreads = batchSize * inputChannels * inputHeight * inputWidth;
+		const int blockSize = 256;
+		const int gridSize = (totalThreads + blockSize - 1) / blockSize;
+
+		Conv2DKernels::gradWrtInputsGPUKernel << <gridSize, blockSize >> > (
+			deviceGradWrtOutputsData, deviceWeightsData, deviceGradWrtInputsData,
+			batchSize, inputChannels, inputHeight, inputWidth,
+			outputChannels, kernelSize, stride, padding,
+			outputHeight, outputWidth);
+
+		// Copy result back
+		cudaError_t deviceGradWrtInputsDataMemcpyStatus = cudaMemcpy(gradWrtInputs.data.data(), deviceGradWrtInputsData, gradWrtInputs.data.size() * sizeof(T), cudaMemcpyDeviceToHost);
+		checkCuda(deviceGradWrtInputsDataMemcpyStatus);
+
+		// Cleanup
+		cudaFree(deviceGradWrtOutputsData);
+		cudaFree(deviceWeightsData);
+		cudaFree(deviceGradWrtInputsData);
+
+		return gradWrtInputs;
 	}
 
 	/// <summary>
@@ -909,7 +1160,7 @@ private:
 	}
 
 	/// <summary>
-	/// Converts a multidimensional set of indices to the equivalent flattened index
+	/// Converts a multidimensional set of indices to the equivalent flattened index.
 	/// </summary>
 	/// <param name="indices"></param>
 	/// <returns>The flattened index</returns>
@@ -930,7 +1181,7 @@ private:
 	/// Credit to https://github.com/tgautam03/CUDA-C/blob/master/05_tiled_mat_mul/tiled_mat_mul_gpu.cu
 	/// </summary>
 	/// <param name="status"></param>
-	void checkCuda(const cudaError_t &status) const {
+	static void checkCuda(const cudaError_t &status) {
 		if (status != cudaSuccess) {
 			std::cout << cudaGetErrorString(status) << "in " << __FILE__  << " at line " << __LINE__ << std::endl;
 			exit(-1);

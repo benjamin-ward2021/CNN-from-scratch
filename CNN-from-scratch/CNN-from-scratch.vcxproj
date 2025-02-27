@@ -156,7 +156,7 @@
     <None Include="MNIST Data\train-labels.idx1-ubyte" />
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="TensorKernels.cuh" />
+    <CudaCompile Include="Kernels.cuh" />
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="XORGenerator.cuh" />
@@ -166,6 +166,9 @@
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="Network.cuh" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Conv2D.cuh" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

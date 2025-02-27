@@ -80,7 +80,7 @@ private:
 			}
 		}
 
-		images = Tensor<T>(imagesData, { amount,rows,cols });
+		images = Tensor<T>(imagesData, { amount,1,rows,cols });
 	}
 
 	/// <summary>
