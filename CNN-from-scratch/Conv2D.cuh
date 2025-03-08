@@ -16,20 +16,26 @@
 template <typename T> requires std::floating_point<T>
 class Conv2D : public Layer<T> {
 public:
-	Conv2D(int inputChannels, int outputChannels, int kernelSize, T learningRate, int rngSeed, 
+	Conv2D(int outputChannels, int kernelSize, T learningRate, int rngSeed, 
 		int stride = 1, int padding = 0, WeightInitializationHeuristic weightInitializationHeuristic = heNormal) 
-		: inputChannels(inputChannels), 
-		outputChannels(outputChannels), 
+		: outputChannels(outputChannels), 
 		kernelSize(kernelSize),
-		weights(Tensor<T>({ outputChannels,inputChannels,kernelSize,kernelSize })),
-		biases(Tensor<T>({ outputChannels })),
-		inputs(Tensor<T>()),
 		learningRate(learningRate), 
+		randomEngine(rngSeed),
 		stride(stride), 
-		padding(padding) {
+		padding(padding),
+		weightInitializationHeuristic(weightInitializationHeuristic) {}
 
+	void initialize(const std::vector<int> &inputDims) override {
 		assert(weightInitializationHeuristic == heNormal || weightInitializationHeuristic == xavierUniform);
-		std::default_random_engine randomEngine(rngSeed);
+
+		inputChannels = inputDims[0];
+		outputHeight = (inputDims[1] + 2 * padding - kernelSize) / stride + 1;
+		outputWidth = (inputDims[2] + 2 * padding - kernelSize) / stride + 1;
+
+		weights = Tensor<T>({ outputChannels,inputChannels,kernelSize,kernelSize });
+		biases = Tensor<T>({ outputChannels });
+		inputs = Tensor<T>();
 
 		if (weightInitializationHeuristic == heNormal) {
 			std::normal_distribution<T> normalDistribution(static_cast<T>(0), static_cast<T>(sqrt(2.0 / (inputChannels * kernelSize * kernelSize))));
@@ -49,6 +55,10 @@ public:
 			// Set biases to 0. Note that this is redundant since when the tensor is created, all values are initialized to 0
 			biases.setToZero();
 		}
+	}
+
+	std::vector<int> getOutputDims() const override {
+		return { outputChannels, outputHeight, outputWidth };
 	}
 
 	/// <summary>
@@ -106,6 +116,10 @@ private:
 	// Number of outgoing channels (Ex. number of filters)
 	int outputChannels;
 
+	int outputHeight;
+
+	int outputWidth;
+
 	// Size of the kernel. Assumes the kernel is a square
 	int kernelSize;
 
@@ -117,4 +131,10 @@ private:
 
 	// Multiplied with the gradients when updating weights and biases. Should be between 0 and 1
 	T learningRate;
+
+	// Used for weight initialization
+	std::default_random_engine randomEngine;
+
+	// Determines the weight initialization scheme
+	WeightInitializationHeuristic weightInitializationHeuristic;
 };

@@ -16,7 +16,10 @@
 template <typename T> requires std::floating_point<T>
 class Network {
 public:
-	Network(std::vector<std::unique_ptr<Layer<T>>> layers) : layers(std::move(layers)) {}
+	Network(std::vector<std::unique_ptr<Layer<T>>> layers, std::vector<int> inputDims) 
+		: layers(std::move(layers)), inputDims(std::move(inputDims)) {
+		initializeLayers();
+	}
 
 	/// <summary>
 	/// Performs forward propagation over all the layers.
@@ -127,4 +130,15 @@ public:
 private:
 	// Use a pointer to prevent object slicing
 	std::vector<std::unique_ptr<Layer<T>>> layers;
+
+	// Dimensions of input (Ex. {1, 28, 28} for MNIST)
+	std::vector<int> inputDims;
+
+	void initializeLayers() {
+		std::vector<int> currentDims = inputDims;
+		for (auto &layer : layers) {
+			layer->initialize(currentDims);
+			currentDims = layer->getOutputDims();
+		}
+	}
 };

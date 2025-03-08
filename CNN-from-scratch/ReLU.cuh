@@ -13,7 +13,16 @@
 template <typename T> requires std::floating_point<T>
 class ReLU : public Layer<T> {
 public:
-	ReLU() : inputs(Tensor<T>()) {}
+	ReLU() = default;
+
+	void initialize(const std::vector<int> &inputDims) override {
+		inputs = Tensor<T>();
+		this->inputDims = inputDims;
+	}
+
+	std::vector<int> getOutputDims() const override {
+		return inputDims;
+	}
 
 	/// <summary>
 	/// Performs forward propagation.
@@ -47,4 +56,5 @@ public:
 
 private:
 	Tensor<T> inputs;
+	std::vector<int> inputDims;
 };

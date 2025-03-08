@@ -30,12 +30,12 @@ void testNetworkXOR() {
 	std::default_random_engine randomEngine(1);
 
 	std::vector<std::unique_ptr<Layer<double>>> layers;
-	layers.push_back(std::make_unique<FullyConnected<double>>(2, 5, 0.05, randomEngine()));
+	layers.push_back(std::make_unique<FullyConnected<double>>(5, 0.05, randomEngine()));
 	layers.push_back(std::make_unique<ReLU<double>>());
-	layers.push_back(std::make_unique<FullyConnected<double>>(5, 2, 0.05, randomEngine()));
+	layers.push_back(std::make_unique<FullyConnected<double>>(2, 0.05, randomEngine()));
 	layers.push_back(std::make_unique<SoftmaxCrossEntropy<double>>());
 
-	Network network(std::move(layers));
+	Network network(std::move(layers), {2});
 	for (int i = 0; i < 1000000; i++) {
 		std::vector<int> indices = generator.getInputs().getRandomIndices(64, randomEngine);
 		Tensor<double> inputs = generator.getInputs().getBatch(indices);
@@ -60,17 +60,16 @@ void testNetworkMNIST() {
 	std::default_random_engine randomEngine(1);
 
 	std::vector<std::unique_ptr<Layer<double>>> layers;
-	layers.push_back(std::make_unique<Conv2D<double>>(1, 11, 3, learningRate, randomEngine()));
+	layers.push_back(std::make_unique<Conv2D<double>>(11, 3, learningRate, randomEngine(), 1, 1));
 	layers.push_back(std::make_unique<ReLU<double>>());
-	layers.push_back(std::make_unique<Conv2D<double>>(11, 33, 3, learningRate, randomEngine()));
+	layers.push_back(std::make_unique<Conv2D<double>>(33, 3, learningRate, randomEngine(), 2, 1));
 	layers.push_back(std::make_unique<ReLU<double>>());
-	// TODO: Automatically find the output size. should be handled by the network. public API should be "add" method.
-	layers.push_back(std::make_unique<FullyConnected<double>>(19008, 11, learningRate, randomEngine()));
+	layers.push_back(std::make_unique<FullyConnected<double>>(11, learningRate, randomEngine()));
 	layers.push_back(std::make_unique<ReLU<double>>());
-	layers.push_back(std::make_unique<FullyConnected<double>>(11, 10, learningRate, randomEngine()));
+	layers.push_back(std::make_unique<FullyConnected<double>>(10, learningRate, randomEngine()));
 	layers.push_back(std::make_unique<SoftmaxCrossEntropy<double>>());
 
-	Network network(std::move(layers));
+	Network network(std::move(layers), { 1,28,28 });
 	auto startTime = std::chrono::high_resolution_clock::now();
 	for (int i = 0; i <= 399; i++) {
 		std::vector<int> indices = trainData.images.getRandomIndices(64, randomEngine);

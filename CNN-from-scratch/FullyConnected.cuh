@@ -15,17 +15,24 @@
 template <typename T> requires std::floating_point<T>
 class FullyConnected : public Layer<T> {
 public:
-	FullyConnected(int inputSize, int outputSize, T learningRate, int rngSeed, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
-		: inputSize(inputSize), 
-		outputSize(outputSize), 
-		weights(Tensor<T>({ inputSize,outputSize })), 
-		biases(Tensor<T>({ outputSize })), 
-		flattenedInputs(Tensor<T>()),
+	FullyConnected(int outputSize, T learningRate, int rngSeed, WeightInitializationHeuristic weightInitializationHeuristic = heNormal)
+		: outputSize(outputSize), 
 		originalInputsDims(std::vector<int>()),
-		learningRate(learningRate) {
+		learningRate(learningRate),
+		randomEngine(rngSeed), 
+		weightInitializationHeuristic(weightInitializationHeuristic) {}
 
+	void initialize(const std::vector<int> &inputDims) override {
 		assert(weightInitializationHeuristic == heNormal || weightInitializationHeuristic == xavierUniform);
-		std::default_random_engine randomEngine(rngSeed);
+
+		inputSize = 1;
+		for (int dim : inputDims) {
+			inputSize *= dim;
+		}
+
+		weights = Tensor<T>({ inputSize,outputSize });
+		biases = Tensor<T>({ outputSize });
+		flattenedInputs = Tensor<T>();
 
 		if (weightInitializationHeuristic == heNormal) {
 			std::normal_distribution<T> normalDistribution(static_cast<T>(0), static_cast<T>(sqrt(2.0 / inputSize)));
@@ -45,6 +52,10 @@ public:
 			// Set biases to 0. Note that this is redundant since when the tensor is created, all values are initialized to 0
 			biases.setToZero();
 		}
+	}
+
+	std::vector<int> getOutputDims() const override {
+		return { outputSize };
 	}
 
 	/// <summary>
@@ -132,4 +143,10 @@ private:
 
 	// Multiplied with the gradients when updating weights and biases. Should be between 0 and 1
 	T learningRate;
+
+	// Used for weight initialization
+	std::default_random_engine randomEngine;
+
+	// Determines the weight initialization scheme
+	WeightInitializationHeuristic weightInitializationHeuristic;
 };

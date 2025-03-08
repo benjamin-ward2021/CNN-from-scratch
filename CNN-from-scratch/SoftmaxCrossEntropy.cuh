@@ -15,6 +15,14 @@ class SoftmaxCrossEntropy : public Layer<T> {
 public:
 	SoftmaxCrossEntropy() : outputs(Tensor<T>()) {}
 
+	void initialize(const std::vector<int> &inputDims) override {
+		outputDims = inputDims;
+	}
+
+	std::vector<int> getOutputDims() const override {
+		return outputDims;
+	}
+
 	/// <summary>
 	/// Performs forward propagation.
 	/// </summary>
@@ -63,4 +71,5 @@ public:
 
 private:
 	Tensor<T> outputs;
+	std::vector<int> outputDims;
 };
